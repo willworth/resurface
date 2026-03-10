@@ -1,0 +1,62 @@
+/* apps/resurface/extension/popup.css */
+
+:root {
+  color-scheme: light;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f4eee3;
+  color: #2f2116;
+}
+
+.popup {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.status {
+  margin: 0;
+  min-height: 38px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.status.success {
+  color: #1f6a3a;
+}
+
+.status.error {
+  color: #8a2323;
+}
+
+button,
+input {
+  font-size: 13px;
+  border-radius: 6px;
+  border: 1px solid #c4b39c;
+}
+
+button {
+  background: #fdf8ef;
+  color: #2f2116;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #f8efdf;
+}
+
+input {
+  padding: 7px 8px;
+  background: #ffffff;
+}

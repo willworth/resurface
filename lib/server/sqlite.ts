@@ -1,0 +1,122 @@
+// apps/resurface/lib/server/sqlite.ts
+
+// packages/apps/resurface/lib/server/sqlite.ts
+
+import fs from 'node:fs'
+import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { ResurfaceItem } from './types'
+
+let sharedDb: DatabaseSync | null = null
+let sharedDbPath: string | null = null
+
+function resolveSqlitePath() {
+  const fromEnv = process.env.RESURFACE_SQLITE_PATH
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return fromEnv.trim()
+  }
+
+  return path.join(process.cwd(), '.resurface', 'resurface.db')
+}
+
+function ensureSchema(db: DatabaseSync) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS resurface_items (
+      id TEXT PRIMARY KEY,
+      url TEXT,
+      title TEXT NOT NULL,
+      summary TEXT,
+      original_text TEXT NOT NULL,
+      category TEXT NOT NULL,
+      suggested_archive TEXT,
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      source TEXT NOT NULL,
+      source_item_id TEXT,
+      captured_at TEXT NOT NULL,
+      ingested_at TEXT NOT NULL,
+      last_surfaced_at TEXT,
+      surface_count INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'active',
+      suppress_until TEXT,
+      archived_at TEXT,
+      archived_to TEXT,
+      dropped_at TEXT,
+      fingerprint TEXT NOT NULL,
+      snooze_count INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_resurface_items_fingerprint
+      ON resurface_items(fingerprint);
+
+    CREATE INDEX IF NOT EXISTS idx_resurface_items_status
+      ON resurface_items(status);
+
+    CREATE INDEX IF NOT EXISTS idx_resurface_items_source_item
+      ON resurface_items(source_item_id);
+  `)
+}
+
+export function getResurfaceDatabase() {
+  const dbPath = resolveSqlitePath()
+  if (sharedDb && sharedDbPath === dbPath) {
+    return sharedDb
+  }
+
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+  sharedDb = new DatabaseSync(dbPath)
+  sharedDbPath = dbPath
+  ensureSchema(sharedDb)
+
+  return sharedDb
+}
+
+export function resetResurfaceDatabaseForTests() {
+  if (!sharedDb) {
+    return
+  }
+
+  sharedDb.close()
+  sharedDb = null
+  sharedDbPath = null
+}
+
+function parseTags(raw: unknown): string[] {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
+  return {
+    id: String(row.id ?? ''),
+    url: (row.url as string | null) ?? null,
+    title: String(row.title ?? ''),
+    summary: (row.summary as string | null) ?? null,
+    originalText: String(row.original_text ?? ''),
+    category: String(row.category ?? 'reference') as ResurfaceItem['category'],
+    suggestedArchive: (row.suggested_archive as string | null) ?? null,
+    tags: parseTags(row.tags_json),
+    source: String(row.source ?? ''),
+    sourceItemId: (row.source_item_id as string | null) ?? null,
+    capturedAt: String(row.captured_at ?? ''),
+    ingestedAt: String(row.ingested_at ?? ''),
+    lastSurfacedAt: (row.last_surfaced_at as string | null) ?? null,
+    surfaceCount: Number(row.surface_count ?? 0),
+    status: String(row.status ?? 'active') as ResurfaceItem['status'],
+    suppressUntil: (row.suppress_until as string | null) ?? null,
+    archivedAt: (row.archived_at as string | null) ?? null,
+    archivedTo: (row.archived_to as string | null) ?? null,
+    droppedAt: (row.dropped_at as string | null) ?? null,
+    fingerprint: String(row.fingerprint ?? ''),
+    snoozeCount: Number(row.snooze_count ?? 0),
+  }
+}

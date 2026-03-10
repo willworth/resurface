@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Resurface Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Resurface</h1>
+      <p id="status" class="status" role="status">Capturing current page...</p>
+
+      <button id="capture-button" type="button">Capture Again</button>
+
+      <label for="endpoint-input">Endpoint URL</label>
+      <input id="endpoint-input" type="url" spellcheck="false" />
+      <button id="save-endpoint-button" type="button">Save Endpoint</button>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

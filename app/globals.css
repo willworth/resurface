@@ -1,0 +1,265 @@
+/* apps/resurface/app/globals.css */
+
+/* packages/apps/resurface/app/globals.css */
+
+:root {
+  --bg: #1c1814;
+  --bg-accent: #252019;
+  --text: #e8dfd0;
+  --muted: #9a8e7e;
+  --card-bg: #231f1a;
+  --card-border: #3a332a;
+  --primary: #6a9e82;
+  --danger: #c46b5e;
+  --link: #8eb8c9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(42, 36, 28, 0.9), transparent 42%),
+    radial-gradient(circle at bottom right, rgba(38, 32, 24, 0.8), transparent 40%),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
+}
+
+.page-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem 1rem;
+}
+
+.stack {
+  width: min(780px, 100%);
+  display: grid;
+  gap: 1rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #f0e6d6;
+}
+
+.header p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.status,
+.error {
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(35, 31, 26, 0.8);
+  border: 1px solid var(--card-border);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.empty-state {
+  padding: 2rem;
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  background: var(--card-bg);
+}
+
+.card {
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  background: var(--card-bg);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.card-link {
+  border-left: 4px solid #6a9ab5;
+}
+
+.card-quote {
+  border-left: 4px solid #9a85b8;
+}
+
+.card-music {
+  border-left: 4px solid #8ba86a;
+}
+
+.card-tool {
+  border-left: 4px solid #6e8da8;
+}
+
+.card-article {
+  border-left: 4px solid #b08a6a;
+}
+
+.card-idea {
+  border-left: 4px solid #9aa55e;
+}
+
+.card-reference {
+  border-left: 4px solid #8a8a8a;
+}
+
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: baseline;
+}
+
+.badge {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.saved {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.25;
+  color: #f0e6d6;
+}
+
+.summary,
+.original {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.original {
+  color: #c4b8a6;
+}
+
+.link {
+  border: none;
+  background: none;
+  color: var(--link);
+  font-size: 0.95rem;
+  text-align: left;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(142, 184, 201, 0.4);
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration-color: var(--link);
+}
+
+.archive-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.archive-input {
+  width: 100%;
+  border-radius: 0.6rem;
+  border: 1px solid var(--card-border);
+  background: #1a1612;
+  padding: 0.65rem 0.75rem;
+  color: var(--text);
+  font-family: inherit;
+}
+
+.archive-input:focus {
+  outline: none;
+  border-color: #5a4f42;
+}
+
+.warning {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.actions button {
+  border: 1px solid var(--card-border);
+  background: #2a2520;
+  border-radius: 0.6rem;
+  padding: 0.7rem 0.65rem;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.actions button:hover {
+  border-color: #5a4f42;
+  background: #332d26;
+}
+
+.actions .danger {
+  color: var(--danger);
+}
+
+.later-wrap {
+  position: relative;
+}
+
+.later-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  border: 1px solid var(--card-border);
+  background: #2a2520;
+  border-radius: 0.6rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+  display: grid;
+}
+
+.later-menu button {
+  border: none;
+  border-bottom: 1px solid #3a332a;
+  border-radius: 0;
+  text-align: left;
+  background: transparent;
+}
+
+.later-menu button:hover {
+  background: #332d26;
+}
+
+.later-menu button:last-child {
+  border-bottom: none;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .actions {
+    grid-template-columns: 1fr;
+  }
+}
