@@ -35,12 +35,10 @@ See **[VISION.md](VISION.md)** for the full roadmap and design direction.
 ### Prerequisites
 
 - Node.js 24+ (uses native `node:sqlite` module)
-- pnpm (monorepo workspace)
+- pnpm
 - Todoist API token (for Todoist ingestion — optional if using CLI only)
 
 ### Installation
-
-From the monorepo root:
 
 ```bash
 pnpm install
@@ -85,8 +83,6 @@ The CLI is the fastest way to add items. No server needed — writes directly to
 SQLite.
 
 ```bash
-cd packages/apps/resurface
-
 # Add items
 node cli.mjs add "https://example.com/great-article"
 node cli.mjs add "Check out Sanderson lectures" --category reference
@@ -118,7 +114,6 @@ as `cli` in the database.
 ### Development Server (web UI)
 
 ```bash
-cd packages/apps/resurface
 pnpm dev
 ```
 
@@ -369,15 +364,14 @@ beforeEach(() => {
 
 ## Contributing
 
-1. Work in the monorepo: `~/code/monorepo`
-2. Create feature branch from `master`
-3. Write tests for new functionality
-4. Run `pnpm test` and `pnpm typecheck` before committing
-5. Update this README if adding new features/endpoints
+1. Create a feature branch from `master`
+2. Write tests for new functionality
+3. Run `pnpm test` and `pnpm typecheck` before committing
+4. Update this README if adding new features/endpoints
 
 ## License
 
-Private — part of Will Worth's personal monorepo.
+MIT License. See **[LICENSE](LICENSE)** for details.
 
 ---
 
