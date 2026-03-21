@@ -10,14 +10,14 @@ Resurface pulls items back out, one at a time, and asks you to make a decision: 
 
 1. **Capture** — throw things in from anywhere: paste a URL, type an idea, sync your Todoist inbox, use the browser extension, or pipe in structured JSON.
 2. **Resurface** — the app picks an item for you using a weighted algorithm (freshness, time since last seen, category diversity, snooze history). You don't choose what to review — that's the point.
-3. **Decide** — archive it (with a destination like "Dev Tools / AI Agents"), snooze it (tomorrow, 3 days, a week, a month), or drop it. Keyboard shortcuts make this fast.
+3. **Engage** — open it. Read the article. Listen to the track. Try the tool. Actually spend time with the thing you saved. Then decide: was it worth keeping? Archive it somewhere useful, or drop it. Not ready yet? Snooze it — but the clock is ticking.
 4. **Force decision** — snooze something 5 times and the app disables snooze. You have to commit: keep it or let it go.
 
-The philosophy: your capture system should have *pressure*. Items should flow through, not accumulate. If you keep deferring something, that's information — either it matters enough to act on, or it doesn't matter at all.
+The point isn't triage. It's *engagement*. Resurface exists to make you actually look at the things you saved, not just sort them into different piles. The archive/snooze/drop flow is there to close the loop after you've engaged — not as a substitute for it.
 
 ## What it looks like
 
-The main view shows one card at a time with the item title, source, age, and action buttons. Keyboard shortcuts: `A` archive, `D` drop, `1-5` for snooze durations, `O` to open the URL. There's a quick-capture `+` button in the header and a full items list at `/items` with sorting, search, filtering by status, and pagination.
+The main view shows one card at a time. Press `O` to open the link — that's the primary action. Once you've looked at it, close the loop: `A` to archive, `D` to drop, or `1-5` to snooze for later. There's a quick-capture `+` button in the header and a full items list at `/items` with sorting, search, filtering by status, and pagination.
 
 ## Ingestion sources
 
