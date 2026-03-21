@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/classify.test.ts
 
-// packages/apps/resurface/lib/server/classify.test.ts
 
 import {
   buildFingerprint,

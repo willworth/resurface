@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/classify.ts
 
-// packages/apps/resurface/lib/server/classify.ts
 
 import crypto from 'node:crypto'
 import { ResurfaceCategory } from './types'

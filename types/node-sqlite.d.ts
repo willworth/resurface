@@ -1,6 +1,5 @@
 // apps/resurface/types/node-sqlite.d.ts
 
-// packages/apps/resurface/types/node-sqlite.d.ts
 
 declare module 'node:sqlite' {
   export class StatementSync {

@@ -1,7 +1,5 @@
 // apps/resurface/components/resurface-client.test.tsx
 
-// packages/apps/resurface/components/resurface-client.test.tsx
-
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { ResurfaceClient } from './resurface-client'
 
@@ -33,7 +31,7 @@ describe('ResurfaceClient keyboard shortcuts', () => {
   const originalFetch = global.fetch
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 
-  beforeEach(() => {
+  function installFetch(forceDecision = false) {
     let firstLoad = true
 
     global.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
@@ -44,7 +42,8 @@ describe('ResurfaceClient keyboard shortcuts', () => {
           ok: true,
           json: async () => ({
             item: firstLoad ? baseItem : null,
-            forceDecision: false,
+            forceDecision,
+            remaining: 10,
           }),
         } as Response
       }
@@ -72,6 +71,10 @@ describe('ResurfaceClient keyboard shortcuts', () => {
         `Unexpected fetch call: ${url} (${init?.method ?? 'GET'})`
       )
     }) as typeof fetch
+  }
+
+  beforeEach(() => {
+    installFetch(false)
   })
 
   afterEach(() => {
@@ -88,7 +91,6 @@ describe('ResurfaceClient keyboard shortcuts', () => {
 
     await screen.findByText('Example item')
 
-    // Wait for the keydown effect to re-register with the loaded item
     await waitFor(() => {
       fireEvent.keyDown(window, { key: 'o' })
       expect(openSpy).toHaveBeenCalledWith(
@@ -120,5 +122,28 @@ describe('ResurfaceClient keyboard shortcuts', () => {
         expect.objectContaining({ method: 'POST' })
       )
     })
+  })
+
+  it('disables snooze buttons in force-decision mode', async () => {
+    installFetch(true)
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+
+    // All snooze buttons should be disabled
+    const snoozeButtons = screen.getAllByRole('button', {
+      name: /1d|3d|1w|1m|\?/,
+    })
+    for (const btn of snoozeButtons) {
+      expect((btn as HTMLButtonElement).disabled).toBe(true)
+    }
+
+    // Pressing a snooze key should not trigger a fetch
+    const fetchCountBefore = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    fireEvent.keyDown(window, { key: '1' })
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      fetchCountBefore
+    )
   })
 })

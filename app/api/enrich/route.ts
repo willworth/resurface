@@ -1,6 +1,5 @@
 // apps/resurface/app/api/enrich/route.ts
 
-// packages/apps/resurface/app/api/enrich/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { enrichItem } from '@/lib/server/enrich'

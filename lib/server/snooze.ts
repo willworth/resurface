@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/snooze.ts
 
-// packages/apps/resurface/lib/server/snooze.ts
 
 export type SnoozePreset =
   | 'tomorrow'

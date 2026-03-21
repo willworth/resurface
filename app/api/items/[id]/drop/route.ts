@@ -1,6 +1,5 @@
 // apps/resurface/app/api/items/[id]/drop/route.ts
 
-// packages/apps/resurface/app/api/items/[id]/drop/route.ts
 
 import { NextResponse } from 'next/server'
 import { dropItem } from '@/lib/server/actions'

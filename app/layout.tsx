@@ -1,6 +1,5 @@
 // apps/resurface/app/layout.tsx
 
-// packages/apps/resurface/app/layout.tsx
 
 import type { Metadata } from 'next'
 import './globals.css'

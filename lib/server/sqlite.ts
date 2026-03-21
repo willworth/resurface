@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/sqlite.ts
 
-// packages/apps/resurface/lib/server/sqlite.ts
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -53,6 +52,20 @@ function ensureSchema(db: DatabaseSync) {
 
     CREATE INDEX IF NOT EXISTS idx_resurface_items_source_item
       ON resurface_items(source_item_id);
+
+    CREATE TABLE IF NOT EXISTS resurface_events (
+      id TEXT PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_resurface_events_item
+      ON resurface_events(item_id);
+
+    CREATE INDEX IF NOT EXISTS idx_resurface_events_type_created
+      ON resurface_events(event_type, created_at);
   `)
 }
 

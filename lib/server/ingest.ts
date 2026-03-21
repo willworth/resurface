@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/ingest.ts
 
-// packages/apps/resurface/lib/server/ingest.ts
 
 import { randomUUID } from 'node:crypto'
 import {
@@ -12,6 +11,7 @@ import {
   extractUrl,
   isCapture,
 } from './classify'
+import { logResurfaceEvent } from './events'
 import { getResurfaceDatabase } from './sqlite'
 import { closeTodoistTask, listInboxTasks } from './todoist'
 import type { ResurfaceCategory } from './types'
@@ -41,6 +41,36 @@ export type ExtensionIngestResult = {
   id: string
   category: ResurfaceCategory
   fingerprint: string
+}
+
+export type NormalizedCaptureInput = {
+  source?: string | null
+  sourceItemId?: string | null
+  text: string
+  url?: string | null
+  capturedAt?: string
+  summary?: string | null
+  category?: ResurfaceCategory | null
+  suggestedArchive?: string | null
+  tags?: string[]
+  title?: string | null
+}
+
+export type GenericIngestResult = {
+  source: string
+  scanned: number
+  persisted: number
+  duplicates: number
+  invalid: number
+  invalidReasons: string[]
+}
+
+export type TwitterBookmarkInput = {
+  tweetId: string
+  text: string
+  url?: string | null
+  authorHandle?: string
+  capturedAt?: string
 }
 
 type TodoistTask = {
@@ -126,14 +156,22 @@ function findExistingCapture(params: {
 }
 
 function insertCapture(params: {
-  task: TodoistTask
+  source: string
+  sourceItemId: string | null
   text: string
   url: string | null
   fingerprint: string
-}): boolean {
+  capturedAt?: string
+  summary?: string | null
+  category?: ResurfaceCategory | null
+  suggestedArchive?: string | null
+  tags?: string[]
+  title?: string | null
+}): { persisted: boolean; itemId: string; category: ResurfaceCategory } {
   const db = getResurfaceDatabase()
-  const category = deriveCategory(params.text, params.url)
+  const category = params.category ?? deriveCategory(params.text, params.url)
   const nowIso = new Date().toISOString()
+  const itemId = randomUUID()
 
   const result = db
     .prepare(
@@ -159,24 +197,141 @@ function insertCapture(params: {
     `
     )
     .run(
-      randomUUID(),
+      itemId,
       params.url,
-      deriveTitle(params.text, params.url),
-      null,
+      params.title ?? deriveTitle(params.text, params.url),
+      params.summary ?? null,
       params.text,
       category,
-      deriveSuggestedArchive(category),
-      JSON.stringify(deriveTags(params.text, params.url)),
-      'todoist-inbox',
-      params.task.id,
-      params.task.created_at ?? nowIso,
+      params.suggestedArchive ?? deriveSuggestedArchive(category),
+      JSON.stringify(params.tags ?? deriveTags(params.text, params.url)),
+      params.source,
+      params.sourceItemId,
+      params.capturedAt ?? nowIso,
       nowIso,
       'active',
       params.fingerprint,
       0
     )
 
-  return result.changes > 0
+  if (result.changes > 0) {
+    logResurfaceEvent('ingested', itemId, {
+      source: params.source,
+      sourceItemId: params.sourceItemId,
+      category,
+    })
+  }
+
+  return { persisted: result.changes > 0, itemId, category }
+}
+
+function normalizeCaptureInput(
+  item: NormalizedCaptureInput
+):
+  | {
+      valid: true
+      normalized: Required<Pick<NormalizedCaptureInput, 'source' | 'text'>> &
+        NormalizedCaptureInput
+    }
+  | { valid: false; reason: string } {
+  const source = item.source?.trim()
+  if (!source) {
+    return { valid: false, reason: 'Missing source' }
+  }
+
+  const text = item.text?.trim()
+  if (!text) {
+    return { valid: false, reason: 'Missing text' }
+  }
+
+  return {
+    valid: true,
+    normalized: {
+      ...item,
+      source,
+      text,
+    },
+  }
+}
+
+export function ingestStructuredCaptures(
+  items: NormalizedCaptureInput[],
+  source = 'structured-json'
+): GenericIngestResult {
+  const result: GenericIngestResult = {
+    source,
+    scanned: items.length,
+    persisted: 0,
+    duplicates: 0,
+    invalid: 0,
+    invalidReasons: [],
+  }
+
+  for (const item of items) {
+    const itemWithDefaults: NormalizedCaptureInput = {
+      ...item,
+      source: item.source ?? source,
+    }
+    const validation = normalizeCaptureInput(itemWithDefaults)
+    if (!validation.valid) {
+      result.invalid += 1
+      result.invalidReasons.push(validation.reason)
+      continue
+    }
+
+    const normalized = validation.normalized
+    const url = normalized.url ?? extractUrl(normalized.text)
+    const fingerprint = buildFingerprint(url, normalized.text)
+
+    if (isAlreadyPersisted(fingerprint)) {
+      result.duplicates += 1
+      continue
+    }
+
+    const inserted = insertCapture({
+      source: normalized.source ?? source,
+      sourceItemId: normalized.sourceItemId ?? null,
+      text: normalized.text,
+      url,
+      fingerprint,
+      capturedAt: normalized.capturedAt,
+      summary: normalized.summary,
+      category: normalized.category,
+      suggestedArchive: normalized.suggestedArchive,
+      tags: normalized.tags,
+      title: normalized.title,
+    })
+
+    if (inserted.persisted) {
+      result.persisted += 1
+    }
+  }
+
+  return result
+}
+
+export function ingestTwitterBookmarks(
+  bookmarks: TwitterBookmarkInput[]
+): GenericIngestResult {
+  const normalized = bookmarks.map((bookmark) => ({
+    source: 'twitter-bookmarks',
+    sourceItemId: bookmark.tweetId,
+    text: bookmark.text,
+    url:
+      bookmark.url ??
+      (bookmark.tweetId
+        ? `https://x.com/i/web/status/${bookmark.tweetId}`
+        : undefined),
+    capturedAt: bookmark.capturedAt,
+    tags: bookmark.authorHandle
+      ? [bookmark.authorHandle.replace(/^@/, '')]
+      : [],
+    title: bookmark.authorHandle
+      ? `Tweet from ${bookmark.authorHandle.replace(/^@/, '@')}`
+      : 'Twitter bookmark',
+  }))
+
+  return ingestStructuredCaptures(normalized, 'twitter-bookmarks')
 }
 
 export async function ingestTodoistInbox(
@@ -217,11 +372,13 @@ export async function ingestTodoistInbox(
         persisted = true
       } else {
         persisted = insertCapture({
-          task,
+          source: 'todoist-inbox',
+          sourceItemId: task.id,
           text,
           url,
           fingerprint,
-        })
+          capturedAt: task.created_at,
+        }).persisted
 
         if (persisted) {
           result.persisted += 1
@@ -280,57 +437,24 @@ export function ingestExtensionCapture(
     }
   }
 
-  const category = deriveCategory(originalText, normalizedUrl)
   const nowIso = new Date().toISOString()
-  const id = randomUUID()
+  const result = insertCapture({
+    source: 'browser-extension',
+    sourceItemId: normalizedUrl,
+    text: originalText,
+    url: normalizedUrl,
+    fingerprint,
+    capturedAt: nowIso,
+    summary: normalizedMetaDescription,
+    category: deriveCategory(originalText, normalizedUrl),
+    title: normalizedTitle ?? deriveTitle(originalText, normalizedUrl),
+  })
 
-  const db = getResurfaceDatabase()
-  const result = db
-    .prepare(
-      `
-      INSERT OR IGNORE INTO resurface_items (
-        id,
-        url,
-        title,
-        summary,
-        original_text,
-        category,
-        suggested_archive,
-        tags_json,
-        source,
-        source_item_id,
-        captured_at,
-        ingested_at,
-        status,
-        fingerprint,
-        snooze_count
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-    )
-    .run(
-      id,
-      normalizedUrl,
-      normalizedTitle ?? deriveTitle(originalText, normalizedUrl),
-      normalizedMetaDescription,
-      originalText,
-      category,
-      deriveSuggestedArchive(category),
-      JSON.stringify(deriveTags(originalText, normalizedUrl)),
-      'browser-extension',
-      normalizedUrl,
-      nowIso,
-      nowIso,
-      'active',
-      fingerprint,
-      0
-    )
-
-  if (result.changes > 0) {
+  if (result.persisted) {
     return {
       status: 'created',
-      id,
-      category,
+      id: result.itemId,
+      category: result.category,
       fingerprint,
     }
   }

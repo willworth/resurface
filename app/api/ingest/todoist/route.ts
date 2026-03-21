@@ -1,6 +1,5 @@
 // apps/resurface/app/api/ingest/todoist/route.ts
 
-// packages/apps/resurface/app/api/ingest/todoist/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { ingestTodoistInbox } from '@/lib/server/ingest'

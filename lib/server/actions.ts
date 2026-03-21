@@ -1,10 +1,14 @@
 // apps/resurface/lib/server/actions.ts
 
-// packages/apps/resurface/lib/server/actions.ts
 
+import { logResurfaceEvent } from './events'
 import { getResurfaceDatabase, mapRowToItem } from './sqlite'
 import { computeSnoozeUntil, SnoozePreset } from './snooze'
 import { ResurfaceItem } from './types'
+
+const FORCE_DECISION_SNOOZE_THRESHOLD = Number(
+  process.env.RESURFACE_FORCE_DECISION_SNOOZE_THRESHOLD ?? '5'
+)
 
 function fetchItem(id: string): ResurfaceItem | null {
   const db = getResurfaceDatabase()
@@ -33,13 +37,35 @@ export function archiveItem(
   `
   ).run(now, archivedTo, id)
 
-  return fetchItem(id)
+  const item = fetchItem(id)
+  if (item) {
+    logResurfaceEvent('archived', item.id, {
+      archivedTo,
+      source: item.source,
+      category: item.category,
+    })
+  }
+
+  return item
 }
+
+export type SnoozeActionResult =
+  | { ok: true; item: ResurfaceItem }
+  | { ok: false; reason: 'item-not-found' | 'force-decision-required' }
 
 export function snoozeItem(
   id: string,
   preset: SnoozePreset
-): ResurfaceItem | null {
+): SnoozeActionResult {
+  const existing = fetchItem(id)
+  if (!existing) {
+    return { ok: false, reason: 'item-not-found' }
+  }
+
+  if (existing.snoozeCount >= FORCE_DECISION_SNOOZE_THRESHOLD) {
+    return { ok: false, reason: 'force-decision-required' }
+  }
+
   const suppressUntil = computeSnoozeUntil(preset)
   const db = getResurfaceDatabase()
 
@@ -53,7 +79,19 @@ export function snoozeItem(
   `
   ).run(suppressUntil, id)
 
-  return fetchItem(id)
+  const item = fetchItem(id)
+  if (!item) {
+    return { ok: false, reason: 'item-not-found' }
+  }
+
+  logResurfaceEvent('snoozed', item.id, {
+    preset,
+    suppressUntil,
+    source: item.source,
+    category: item.category,
+  })
+
+  return { ok: true, item }
 }
 
 export function dropItem(id: string): ResurfaceItem | null {
@@ -70,5 +108,13 @@ export function dropItem(id: string): ResurfaceItem | null {
   `
   ).run(now, id)
 
-  return fetchItem(id)
+  const item = fetchItem(id)
+  if (item) {
+    logResurfaceEvent('dropped', item.id, {
+      source: item.source,
+      category: item.category,
+    })
+  }
+
+  return item
 }

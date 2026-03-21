@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/todoist.ts
 
-// packages/apps/resurface/lib/server/todoist.ts
 
 import fs from 'node:fs'
 import os from 'node:os'

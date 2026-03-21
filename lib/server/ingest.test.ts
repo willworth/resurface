@@ -5,7 +5,11 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { getResurfaceDatabase, resetResurfaceDatabaseForTests } from './sqlite'
-import { ingestExtensionCapture } from './ingest'
+import {
+  ingestExtensionCapture,
+  ingestStructuredCaptures,
+  ingestTwitterBookmarks,
+} from './ingest'
 
 describe('ingestExtensionCapture', () => {
   let tmpDir: string
@@ -90,5 +94,70 @@ describe('ingestExtensionCapture', () => {
         title: 'Missing URL',
       })
     ).toThrow('url is required')
+  })
+
+  it('ingests structured captures with batch-level source defaulting', () => {
+    const result = ingestStructuredCaptures(
+      [
+        {
+          sourceItemId: 'note-1',
+          text: 'Interesting post https://example.com/hello',
+          tags: ['research'],
+        },
+      ],
+      'obsidian-json'
+    )
+
+    expect(result.persisted).toBe(1)
+    expect(result.invalid).toBe(0)
+
+    const db = getResurfaceDatabase()
+    const row = db
+      .prepare('SELECT source, source_item_id FROM resurface_items LIMIT 1')
+      .get() as { source: string; source_item_id: string }
+
+    expect(row.source).toBe('obsidian-json')
+    expect(row.source_item_id).toBe('note-1')
+  })
+
+  it('deduplicates structured captures by fingerprint', () => {
+    const first = ingestStructuredCaptures([
+      {
+        source: 'obsidian-json',
+        sourceItemId: 'note-1',
+        text: 'Interesting post https://example.com/hello',
+      },
+    ])
+
+    const second = ingestStructuredCaptures([
+      {
+        source: 'obsidian-json',
+        sourceItemId: 'note-2',
+        text: 'Interesting post https://example.com/hello?utm_source=test',
+      },
+    ])
+
+    expect(first.persisted).toBe(1)
+    expect(second.duplicates).toBe(1)
+  })
+
+  it('accepts twitter bookmark payload shape', () => {
+    const result = ingestTwitterBookmarks([
+      {
+        tweetId: '1234567890',
+        text: 'Great thread on AI agents',
+        authorHandle: '@willworth',
+      },
+    ])
+
+    expect(result.persisted).toBe(1)
+
+    const db = getResurfaceDatabase()
+    const row = db
+      .prepare('SELECT source, url FROM resurface_items LIMIT 1')
+      .get() as { source: string; url: string }
+
+    expect(row.source).toBe('twitter-bookmarks')
+    expect(row.url).toContain('1234567890')
   })
 })

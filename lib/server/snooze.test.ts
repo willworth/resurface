@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/snooze.test.ts
 
-// packages/apps/resurface/lib/server/snooze.test.ts
 
 import { computeSnoozeUntil } from './snooze'
 

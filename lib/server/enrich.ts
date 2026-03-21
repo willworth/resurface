@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/enrich.ts
 
-// packages/apps/resurface/lib/server/enrich.ts
 
 import {
   deriveCategory,

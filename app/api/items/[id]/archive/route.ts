@@ -1,6 +1,5 @@
 // apps/resurface/app/api/items/[id]/archive/route.ts
 
-// packages/apps/resurface/app/api/items/[id]/archive/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { archiveItem } from '@/lib/server/actions'

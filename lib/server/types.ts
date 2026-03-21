@@ -1,6 +1,5 @@
 // apps/resurface/lib/server/types.ts
 
-// packages/apps/resurface/lib/server/types.ts
 
 export type ResurfaceStatus = 'active' | 'snoozed' | 'archived' | 'dropped'
 

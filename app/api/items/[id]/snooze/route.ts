@@ -1,6 +1,5 @@
 // apps/resurface/app/api/items/[id]/snooze/route.ts
 
-// packages/apps/resurface/app/api/items/[id]/snooze/route.ts
 
 import { NextRequest, NextResponse } from 'next/server'
 import { snoozeItem } from '@/lib/server/actions'

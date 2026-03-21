@@ -1,24 +1,29 @@
 // apps/resurface/components/resurface-client.tsx
 
-// packages/apps/resurface/components/resurface-client.tsx
-
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { SnoozePreset } from '@/lib/server/snooze'
 import { ResurfaceItem } from '@/lib/server/types'
 
 type NextItemResponse = {
   item: ResurfaceItem | null
   forceDecision: boolean
+  remaining: number
 }
 
-const PRESETS: Array<{ label: string; value: SnoozePreset }> = [
-  { label: 'Tomorrow', value: 'tomorrow' },
-  { label: 'This weekend', value: 'this-weekend' },
-  { label: 'Next week', value: 'next-week' },
-  { label: 'In a month', value: 'in-a-month' },
-  { label: 'Surprise me', value: 'surprise' },
+const SNOOZE_SHORTCUTS: Array<{
+  key: string
+  label: string
+  value: SnoozePreset
+  shortLabel: string
+}> = [
+  { key: '1', label: 'Tomorrow', value: 'tomorrow', shortLabel: '1d' },
+  { key: '2', label: '3 days', value: 'this-weekend', shortLabel: '3d' },
+  { key: '3', label: 'Next week', value: 'next-week', shortLabel: '1w' },
+  { key: '4', label: 'Month', value: 'in-a-month', shortLabel: '1m' },
+  { key: '5', label: 'Surprise', value: 'surprise', shortLabel: '?' },
 ]
 
 const CATEGORY_LABELS: Record<ResurfaceItem['category'], string> = {
@@ -38,33 +43,185 @@ function daysAgo(iso: string): number {
   return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
 }
 
+function daysAgoLabel(days: number): string {
+  if (days === 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 30) return `${days}d ago`
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`
+  return `${Math.floor(days / 365)}y ago`
+}
+
 function categoryClassName(category: ResurfaceItem['category']): string {
-  switch (category) {
-    case 'music':
-      return 'card card-music'
-    case 'quote':
-      return 'card card-quote'
-    case 'tool':
-      return 'card card-tool'
-    case 'article':
-      return 'card card-article'
-    case 'idea':
-      return 'card card-idea'
-    case 'reference':
-      return 'card card-reference'
-    case 'link':
-    default:
-      return 'card card-link'
+  const map: Record<string, string> = {
+    music: 'card card-music',
+    quote: 'card card-quote',
+    tool: 'card card-tool',
+    article: 'card card-article',
+    idea: 'card card-idea',
+    reference: 'card card-reference',
   }
+  return map[category] ?? 'card card-link'
+}
+
+/** Try to extract a clean title from potentially messy markdown-in-title text */
+function cleanTitle(item: ResurfaceItem): string {
+  const raw = item.title ?? ''
+  // Strip markdown link syntax: [text](url) → text
+  const stripped = raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+  // If title is just the URL, use domain instead
+  if (stripped === item.url || stripped === item.originalText) {
+    try {
+      return new URL(item.url ?? '').hostname.replace('www.', '')
+    } catch {
+      return stripped
+    }
+  }
+  return stripped.trim()
+}
+
+/** Get display text — avoid showing URL twice */
+function getDescription(item: ResurfaceItem): string | null {
+  const text = item.originalText ?? ''
+  // If originalText is just the URL, skip it (URL is shown separately)
+  if (text === item.url) return null
+  // If it's the same as title, skip it
+  if (text === item.title) return null
+  return text
+}
+
+function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [flash, setFlash] = useState<string | null>(null)
+
+  const submit = useCallback(async () => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    setSaving(true)
+    setFlash(null)
+
+    try {
+      // Detect if it's a URL or freeform text
+      const isUrl = /^https?:\/\//i.test(trimmed)
+
+      const item = {
+        text: isUrl ? notes.trim() || trimmed : trimmed,
+        url: isUrl ? trimmed : null,
+        source: 'web-ui',
+        summary: notes.trim() || null,
+      }
+
+      const res = await fetch('/api/ingest/json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [item], source: 'web-ui' }),
+      })
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(body.error ?? 'Failed to save')
+      }
+
+      const result = (await res.json()) as {
+        persisted: number
+        duplicates: number
+      }
+
+      if (result.duplicates > 0) {
+        setFlash('Already saved')
+      } else {
+        setFlash('Saved ✓')
+        setText('')
+        setNotes('')
+        onCaptured()
+      }
+
+      setTimeout(() => setFlash(null), 2000)
+    } catch (err) {
+      setFlash(err instanceof Error ? err.message : 'Error')
+      setTimeout(() => setFlash(null), 3000)
+    } finally {
+      setSaving(false)
+    }
+  }, [text, notes, onCaptured])
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        void submit()
+      }
+      if (e.key === 'Escape') {
+        setOpen(false)
+      }
+    },
+    [submit]
+  )
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className="capture-toggle"
+        onClick={() => setOpen(true)}
+        title="Quick capture (paste a URL or idea)"
+      >
+        +
+      </button>
+    )
+  }
+
+  return (
+    <div className="capture-form" onKeyDown={handleKeyDown}>
+      <input
+        autoFocus
+        className="capture-input"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Paste a URL or type an idea…"
+        disabled={saving}
+      />
+      <input
+        className="capture-notes"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        placeholder="Notes (optional)"
+        disabled={saving}
+      />
+      <div className="capture-actions">
+        <button
+          type="button"
+          className="capture-save"
+          onClick={submit}
+          disabled={saving || !text.trim()}
+        >
+          {saving ? '…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          className="capture-cancel"
+          onClick={() => setOpen(false)}
+        >
+          ✕
+        </button>
+        {flash && <span className="capture-flash">{flash}</span>}
+      </div>
+      <span className="capture-hint">⌘↵ to save · Esc to close</span>
+    </div>
+  )
 }
 
 export function ResurfaceClient() {
   const [item, setItem] = useState<ResurfaceItem | null>(null)
   const [forceDecision, setForceDecision] = useState(false)
+  const [remaining, setRemaining] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showLaterMenu, setShowLaterMenu] = useState(false)
   const [archivedTo, setArchivedTo] = useState('')
+  const [transitioning, setTransitioning] = useState(false)
 
   const loadNext = useCallback(async () => {
     setLoading(true)
@@ -82,8 +239,8 @@ export function ResurfaceClient() {
       const payload = (await response.json()) as NextItemResponse
       setItem(payload.item)
       setForceDecision(payload.forceDecision)
+      setRemaining(payload.remaining)
       setArchivedTo(payload.item?.suggestedArchive ?? '')
-      setShowLaterMenu(false)
     } catch (nextError) {
       setError(
         nextError instanceof Error ? nextError.message : 'Unexpected error'
@@ -101,18 +258,18 @@ export function ResurfaceClient() {
 
   const takeAction = useCallback(
     async (endpoint: string, body: Record<string, unknown> = {}) => {
-      if (!item) {
-        return
-      }
+      if (!item) return
 
-      setLoading(true)
+      setTransitioning(true)
       setError(null)
+
+      // Brief fade-out before loading next
+      await new Promise((r) => setTimeout(r, 150))
+
       try {
         const response = await fetch(endpoint, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
 
@@ -125,12 +282,13 @@ export function ResurfaceClient() {
 
         await loadNext()
       } catch (actionError) {
-        setLoading(false)
         setError(
           actionError instanceof Error
             ? actionError.message
             : 'Unexpected error'
         )
+      } finally {
+        setTransitioning(false)
       }
     },
     [item, loadNext]
@@ -150,10 +308,10 @@ export function ResurfaceClient() {
 
   const onSnooze = useCallback(
     (preset: SnoozePreset) => {
-      if (!item) return
+      if (!item || forceDecision) return
       void takeAction(`/api/items/${item.id}/snooze`, { preset })
     },
-    [item, takeAction]
+    [item, forceDecision, takeAction]
   )
 
   const onOpen = useCallback(() => {
@@ -171,30 +329,38 @@ export function ResurfaceClient() {
       if (!item) return
 
       const key = event.key.toLowerCase()
+
       if (key === 'a') {
         event.preventDefault()
         onArchive()
-      }
-      if (key === 'l') {
-        event.preventDefault()
-        setShowLaterMenu((current) => !current)
-      }
-      if (key === 'd') {
+      } else if (key === 'd') {
         event.preventDefault()
         onDrop()
-      }
-      if (key === 'o' && item.url) {
+      } else if (key === 'o' && item.url) {
         event.preventDefault()
         onOpen()
+      } else if (
+        !forceDecision &&
+        SNOOZE_SHORTCUTS.some((s) => s.key === key)
+      ) {
+        event.preventDefault()
+        const preset = SNOOZE_SHORTCUTS.find((s) => s.key === key)
+        if (preset) onSnooze(preset.value)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [item, onArchive, onDrop, onOpen])
+  }, [forceDecision, item, onArchive, onDrop, onOpen, onSnooze])
 
   const savedDaysAgo = useMemo(
     () => (item ? daysAgo(item.capturedAt) : 0),
+    [item]
+  )
+
+  const title = useMemo(() => (item ? cleanTitle(item) : ''), [item])
+  const description = useMemo(
+    () => (item ? getDescription(item) : null),
     [item]
   )
 
@@ -202,11 +368,22 @@ export function ResurfaceClient() {
     <main className="page-shell">
       <section className="stack">
         <header className="header">
-          <h1>Resurface</h1>
-          <p>One saved item at a time.</p>
+          <div className="header-row">
+            <h1>Resurface</h1>
+            <div className="header-right">
+              {remaining > 0 && (
+                <Link href="/items" className="remaining">
+                  {remaining} items
+                </Link>
+              )}
+              <QuickCapture onCaptured={loadNext} />
+            </div>
+          </div>
         </header>
 
-        {loading && <p className="status">Loading next item…</p>}
+        {loading && !transitioning && (
+          <p className="status">Loading next item…</p>
+        )}
 
         {!loading && error && <p className="error">{error}</p>}
 
@@ -218,73 +395,110 @@ export function ResurfaceClient() {
         )}
 
         {!loading && !error && item && (
-          <article className={categoryClassName(item.category)}>
+          <article
+            className={`${categoryClassName(item.category)}${transitioning ? ' fading' : ''}`}
+          >
             <div className="meta-row">
               <span className="badge">{CATEGORY_LABELS[item.category]}</span>
-              <span className="saved">saved {savedDaysAgo} days ago</span>
+              <div className="meta-right">
+                {item.snoozeCount > 0 && (
+                  <span className="snooze-count">
+                    snoozed {item.snoozeCount}/5
+                  </span>
+                )}
+                <span className="saved">{daysAgoLabel(savedDaysAgo)}</span>
+              </div>
             </div>
 
-            <h2>{item.title}</h2>
+            <h2>{title}</h2>
+            {description ? <p className="description">{description}</p> : null}
             {item.summary ? <p className="summary">{item.summary}</p> : null}
-            <p className="original">{item.originalText}</p>
 
             {item.url ? (
               <button type="button" className="link" onClick={onOpen}>
-                {item.url}
+                {(() => {
+                  try {
+                    const u = new URL(item.url)
+                    return u.hostname.replace('www.', '') + u.pathname
+                  } catch {
+                    return item.url
+                  }
+                })()}
               </button>
             ) : null}
 
             <label className="archive-label" htmlFor="archive-category">
-              Suggested archive
+              Archive to
             </label>
             <input
               id="archive-category"
               value={archivedTo}
               onChange={(event) => setArchivedTo(event.target.value)}
               className="archive-input"
+              placeholder="e.g. Dev Tools / AI Agents"
             />
 
             {forceDecision ? (
               <p className="warning">
-                You&apos;ve snoozed this 5 times. Archive or drop.
+                Snoozed 5 times — time to decide. Archive or drop.
               </p>
             ) : null}
 
             <div className="actions">
-              <button type="button" onClick={onArchive}>
-                ✓ Archive (A)
+              <button
+                type="button"
+                className="action-archive"
+                onClick={onArchive}
+              >
+                ✓ Archive
               </button>
 
-              <div className="later-wrap">
-                <button
-                  type="button"
-                  onClick={() => setShowLaterMenu((current) => !current)}
-                >
-                  ⏰ Later (L)
-                </button>
-                {showLaterMenu ? (
-                  <div className="later-menu">
-                    {PRESETS.map((preset) => (
-                      <button
-                        key={preset.value}
-                        type="button"
-                        onClick={() => onSnooze(preset.value)}
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+              <div className="snooze-bar">
+                {SNOOZE_SHORTCUTS.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    disabled={forceDecision}
+                    className="snooze-btn"
+                    onClick={() => onSnooze(preset.value)}
+                    title={preset.label}
+                  >
+                    {preset.shortLabel}
+                  </button>
+                ))}
               </div>
 
-              <button type="button" className="danger" onClick={onDrop}>
-                🗑 Drop (D)
+              <button type="button" className="action-drop" onClick={onDrop}>
+                ✕ Drop
               </button>
             </div>
 
-            <p className="hint">
-              Keyboard: A archive · L later · D drop · O open URL
-            </p>
+            <div className="shortcut-cheat">
+              <span>
+                <kbd>A</kbd> archive
+              </span>
+              <span>
+                <kbd>1</kbd> 1d
+              </span>
+              <span>
+                <kbd>2</kbd> 3d
+              </span>
+              <span>
+                <kbd>3</kbd> 1w
+              </span>
+              <span>
+                <kbd>4</kbd> 1m
+              </span>
+              <span>
+                <kbd>5</kbd> ?
+              </span>
+              <span>
+                <kbd>D</kbd> drop
+              </span>
+              <span>
+                <kbd>O</kbd> open
+              </span>
+            </div>
           </article>
         )}
       </section>
