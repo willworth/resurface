@@ -1,379 +1,149 @@
 # Resurface
 
-Personal capture resurfacing system — ingest ideas, links, and notes from
-various sources, then surface them back at optimal intervals to prevent digital
-hoarding and encourage action.
+**Stop saving things you'll never look at again.**
 
-## Overview
+Resurface is a personal tool for the gap between capturing an idea and doing something with it. You save interesting links, note things to explore, bookmark articles "for later" — and then they vanish into a write-only graveyard. Pocket, Todoist inbox, browser bookmarks, notes apps: they're all the same hole.
 
-Resurface addresses a common problem: you capture great ideas, save interesting
-links, and note things to explore... then never see them again. This app:
+Resurface pulls items back out, one at a time, and asks you to make a decision: archive it somewhere useful, snooze it for later, or drop it. No infinite scroll. No backlog anxiety. One item, one decision.
 
-- **Ingests** items from Todoist, CLI, and browser extension capture
-- **Classifies** them into categories (links, quotes, music, tools, articles,
-  ideas, references)
-- **Surfaces** old/forgotten items back to you at intervals optimized to prevent
-  both spam and abandonment
-- **Tracks** what you've seen, snoozed, archived, or dropped
+## How it works
 
-The goal: turn your capture system from a write-only graveyard into a living
-garden of ideas that actually resurface when useful.
+1. **Capture** — throw things in from anywhere: paste a URL, type an idea, sync your Todoist inbox, use the browser extension, or pipe in structured JSON.
+2. **Resurface** — the app picks an item for you using a weighted algorithm (freshness, time since last seen, category diversity, snooze history). You don't choose what to review — that's the point.
+3. **Decide** — archive it (with a destination like "Dev Tools / AI Agents"), snooze it (tomorrow, 3 days, a week, a month), or drop it. Keyboard shortcuts make this fast.
+4. **Force decision** — snooze something 5 times and the app disables snooze. You have to commit: keep it or let it go.
 
-See **[VISION.md](VISION.md)** for the full roadmap and design direction.
+The philosophy: your capture system should have *pressure*. Items should flow through, not accumulate. If you keep deferring something, that's information — either it matters enough to act on, or it doesn't matter at all.
 
-## Tech Stack
+## What it looks like
 
-- **Next.js 15** (App Router)
-- **React 19**
-- **TypeScript** (strict mode)
-- **SQLite** (via `node:sqlite`, native Node.js module)
-- **Todoist API** (unified v1 — migrated from deprecated v2 REST, Feb 2026)
-- **Vitest** for testing
+The main view shows one card at a time with the item title, source, age, and action buttons. Keyboard shortcuts: `A` archive, `D` drop, `1-5` for snooze durations, `O` to open the URL. There's a quick-capture `+` button in the header and a full items list at `/items` with sorting, search, filtering by status, and pagination.
+
+## Ingestion sources
+
+| Source | How |
+|--------|-----|
+| **Web UI** | Click `+`, paste a URL or type an idea, optionally add notes |
+| **CLI** | `node cli.mjs add "https://example.com"` — no server needed, writes directly to SQLite |
+| **Todoist** | `POST /api/ingest/todoist` — syncs inbox, classifies captures vs actions, completes ingested items |
+| **Browser extension** | Chrome/Firefox MV3 extension captures current page with selection and metadata |
+| **Structured JSON** | `POST /api/ingest/json` — batch ingest from any source |
+| **Twitter bookmarks** | `POST /api/ingest/twitter-bookmarks` — import from Twitter export |
+| **Obsidian vault** | `node cli.mjs obsidian` — bulk import from configured vault markdown files |
+
+Items are auto-classified into categories (link, tool, music, article, quote, idea, reference) with suggested archive destinations. Deduplication via SHA-256 content fingerprinting.
+
+## Tech stack
+
+- **Next.js 15** / React 19 / TypeScript (strict)
+- **SQLite** via `node:sqlite` (Node.js 24+ native module — no ORM, no external DB)
+- **Vitest** for testing (36 tests)
+- Single-file database at `.resurface/resurface.db`
+
+The entire backend is pure functions calling SQLite. No Redis, no Postgres, no auth layer, no external services (except Todoist if you use that integration). Runs on a single machine.
 
 ## Setup
 
-### Prerequisites
-
-- Node.js 24+ (uses native `node:sqlite` module)
-- pnpm
-- Todoist API token (for Todoist ingestion — optional if using CLI only)
-
-### Installation
-
 ```bash
+# Requires Node.js 24+
 pnpm install
-```
-
-### Configuration
-
-**Todoist Token:**
-
-Option 1 (Environment variable):
-
-```bash
-export TODOIST_TOKEN="your-token-here"
-```
-
-Option 2 (Config file):
-
-```bash
-mkdir -p ~/.config/todoist
-echo "your-token-here" > ~/.config/todoist/token
-```
-
-Get your token from
-[Todoist App Settings](https://todoist.com/app/settings/integrations/developer).
-
-**SQLite Database Path (optional):**
-
-By default, the database is created at `.resurface/resurface.db` in the project
-directory.
-
-To customize:
-
-```bash
-export RESURFACE_SQLITE_PATH="/path/to/custom/resurface.db"
-```
-
-## Usage
-
-### CLI (recommended for agents and quick capture)
-
-The CLI is the fastest way to add items. No server needed — writes directly to
-SQLite.
-
-```bash
-# Add items
-node cli.mjs add "https://example.com/great-article"
-node cli.mjs add "Check out Sanderson lectures" --category reference
-node cli.mjs add "https://youtu.be/xyz" -c music -t "Cool song"
-
-# View stats
-node cli.mjs stats
-
-# List items
-node cli.mjs list
-node cli.mjs list --status snoozed --limit 10
-```
-
-**Options for `add`:**
-
-| Flag             | Description                                                      |
-| ---------------- | ---------------------------------------------------------------- |
-| `--category, -c` | Override category (link/quote/music/tool/article/idea/reference) |
-| `--title, -t`    | Override title (default: derived from content)                   |
-
-**Auto-detection:** If no category is given, the CLI infers it from the URL
-(YouTube/Spotify → music, GitHub → tool, Substack → article) or content (quotes,
-ideas, etc.).
-
-**For AI agents:** Any agent with terminal access can run
-`node cli.mjs add "..."` to save items on behalf of the user. Source is tagged
-as `cli` in the database.
-
-### Development Server (web UI)
-
-```bash
-pnpm dev
-```
-
-App runs at **http://localhost:7790** (or http://0.0.0.0:7790 for network
-access).
-
-### Todoist Ingestion
-
-Trigger a manual sync from Todoist Inbox (server must be running):
-
-```bash
-curl -X POST http://localhost:7790/api/ingest/todoist \
-  -H "Content-Type: application/json" \
-  -d '{"maxItems": 250}'
-```
-
-This fetches up to 250 tasks from Todoist Inbox, classifies captures vs action
-tasks, persists captures to SQLite, and completes ingested tasks in Todoist.
-
-### Browser Extension Ingestion
-
-The browser extension posts page captures to:
-
-```bash
-POST http://localhost:7790/api/ingest/extension
-```
-
-Payload shape:
-
-```json
-{
-  "url": "https://example.com/page",
-  "title": "Page Title",
-  "selectedText": "optional highlighted text",
-  "content": "cleaned page content",
-  "metaDescription": "optional meta description",
-  "ogImage": "optional OG image URL"
-}
-```
-
-Extension source files are in `apps/resurface/extension/` (load unpacked in
-Chrome or as a temporary add-on in Firefox).
-
-### Build for Production
-
-```bash
 pnpm build
-pnpm start
+pnpm start        # Production server on port 7790
+# or
+pnpm dev          # Dev server with hot reload
 ```
 
-### Run Tests
+**Optional: Todoist integration**
+```bash
+# Get token from https://todoist.com/app/settings/integrations/developer
+export TODOIST_TOKEN="your-token"
+# or
+mkdir -p ~/.config/todoist && echo "your-token" > ~/.config/todoist/token
+```
+
+**Optional: Custom database path**
+```bash
+export RESURFACE_SQLITE_PATH="/path/to/resurface.db"
+```
+
+## CLI
+
+The CLI writes directly to SQLite — no server needed. Good for scripts and AI agents.
 
 ```bash
-pnpm test          # Run all tests
-pnpm typecheck     # TypeScript validation
-pnpm lint          # ESLint
+node cli.mjs add "https://example.com/article"          # Auto-classified as 'link'
+node cli.mjs add "https://youtu.be/xyz" -c music        # Override category
+node cli.mjs add "Look into spaced repetition" -t "SR"  # With custom title
+node cli.mjs stats                                       # Item counts by status
+node cli.mjs list --status snoozed --limit 10            # Filter items
+node cli.mjs obsidian                                    # Import from Obsidian vault
 ```
 
-## Architecture
+## Resurfacing algorithm
+
+Items are scored using a weighted formula (all weights configurable via environment variables):
+
+- **Freshness** — newer items score higher
+- **Resurfacing gap** — items not seen for a long time score higher
+- **Diversity boost** — avoids showing the same category repeatedly
+- **Snooze penalty** — frequently-snoozed items score lower
+- **Intent boost** — tagged items (urgent, research, buy) score higher
+
+Never-surfaced items are prioritised. After 5 snoozes, the "Later" option is disabled and you must archive or drop.
+
+Telemetry: all actions (ingest, surface, archive, snooze, drop) are logged to a `resurface_events` table for future analytics.
+
+## API
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/items/next` | GET | Next item to surface (weighted) |
+| `/api/items/list` | GET | All items with pagination, sorting, search, status filter |
+| `/api/items/session` | GET | Batch of ranked items for a session |
+| `/api/items/[id]/archive` | POST | Archive with optional destination |
+| `/api/items/[id]/snooze` | POST | Snooze with preset (tomorrow, this-weekend, next-week, in-a-month, surprise) |
+| `/api/items/[id]/drop` | POST | Drop permanently |
+| `/api/ingest/json` | POST | Batch ingest structured items |
+| `/api/ingest/todoist` | POST | Sync Todoist inbox |
+| `/api/ingest/extension` | POST | Browser extension capture |
+| `/api/ingest/twitter-bookmarks` | POST | Twitter bookmarks import |
+| `/api/enrich` | POST | AI enrichment (classification, summarisation) |
+
+## Project structure
 
 ```
-resurface/
-├── cli.mjs                      # Standalone CLI (no build step, node:sqlite)
-├── app/                         # Next.js App Router
-│   ├── page.tsx                 # Main UI (ResurfaceClient)
-│   ├── layout.tsx               # Root layout
-│   └── api/                     # API routes
-│       ├── ingest/              # Ingestion endpoints
-│       │   ├── todoist/         # Todoist sync
-│       │   └── extension/       # Browser extension capture endpoint
-│       ├── enrich/              # AI enrichment (classification, summarization)
-│       └── items/               # Item actions (next, archive, drop, snooze)
+├── app/
+│   ├── page.tsx                    # Main resurface UI
+│   ├── items/page.tsx              # Items list/table view
+│   └── api/                        # All API routes
 ├── components/
-│   └── resurface-client.tsx     # Main React UI component
-├── lib/
-│   └── server/                  # Server-side logic
-│       ├── sqlite.ts            # Database setup & queries
-│       ├── types.ts             # TypeScript type definitions
-│       ├── todoist.ts           # Todoist API client (unified v1)
-│       ├── surface.ts           # Resurfacing algorithm
-│       ├── classify.ts          # Classification (categories, summaries)
-│       ├── enrich.ts            # Metadata enrichment
-│       ├── snooze.ts            # Snooze logic
-│       └── actions.ts           # Server actions (archive, drop, etc.)
-├── types/
-│   └── node-sqlite.d.ts         # Type definitions for node:sqlite
-├── VISION.md                    # Roadmap and design direction
-├── extension/                   # Chrome/Firefox MV3 extension files
-└── .resurface/
-    └── resurface.db             # SQLite database (auto-created)
+│   ├── resurface-client.tsx        # Card view + quick capture
+│   └── items-client.tsx            # Sortable items table
+├── lib/server/
+│   ├── surface.ts                  # Weighted resurfacing algorithm
+│   ├── actions.ts                  # Archive, snooze, drop logic
+│   ├── ingest.ts                   # Structured ingest pipeline
+│   ├── classify.ts                 # Auto-classification
+│   ├── events.ts                   # Telemetry logging
+│   ├── snooze.ts                   # Snooze presets and calculations
+│   ├── sqlite.ts                   # Database setup
+│   └── types.ts                    # TypeScript types
+├── cli.mjs                         # Standalone CLI (no build step)
+├── scripts/
+│   ├── ingest-structured.mjs       # Batch JSON ingest script
+│   └── ingest-twitter-bookmarks.mjs
+├── extension/                      # Chrome/Firefox MV3 browser extension
+└── .resurface/resurface.db         # SQLite database (auto-created)
 ```
-
-## Todoist Integration
-
-### How It Works
-
-1. **Ingestion**: `POST /api/ingest/todoist` fetches tasks from Todoist Inbox
-2. **Deduplication**: Uses fingerprint (normalized content hash) to avoid
-   duplicates
-3. **Classification**: Categorizes items
-   (link/quote/music/tool/article/idea/reference)
-4. **Storage**: Saves to SQLite with metadata (source, timestamps, counts)
-5. **Completion**: Ingested captures are marked complete in Todoist
-
-### API Migration Note (Feb 2026)
-
-Todoist deprecated their REST API v2 and moved to a unified API at `/api/v1/`.
-Key changes in `lib/server/todoist.ts`:
-
-- Base URL: `https://api.todoist.com/rest/v2/` →
-  `https://api.todoist.com/api/v1/`
-- Responses wrapped in `{ results: [...], next_cursor: string | null }`
-- Field renames: `is_inbox_project` → `inbox_project`, `created_at` → `added_at`
-
-### Supported Fields
-
-- **Content**: Task title
-- **Description**: Task description (if present)
-- **Created date**: Capture timestamp
-- **URL extraction**: Links detected in content/description
-
-### Current Limitations
-
-- Only syncs Inbox tasks (not all projects)
-- One-way sync (no updates back to Todoist)
-- No attachment support
-
-## Data Model
-
-### SQLite Schema
-
-**Table: `resurface_items`**
-
-| Column              | Type    | Description                                                   |
-| ------------------- | ------- | ------------------------------------------------------------- |
-| `id`                | TEXT    | UUID primary key                                              |
-| `url`               | TEXT    | Extracted URL (if any)                                        |
-| `title`             | TEXT    | Item title (required)                                         |
-| `summary`           | TEXT    | AI-generated summary                                          |
-| `original_text`     | TEXT    | Raw content from source                                       |
-| `category`          | TEXT    | Classification (link/quote/music/tool/article/idea/reference) |
-| `suggested_archive` | TEXT    | AI-suggested destination for archival                         |
-| `tags_json`         | TEXT    | JSON array of tags                                            |
-| `source`            | TEXT    | Source system (`todoist-inbox`, `cli`, etc.)                  |
-| `source_item_id`    | TEXT    | Original item ID from source                                  |
-| `captured_at`       | TEXT    | ISO timestamp when originally captured                        |
-| `ingested_at`       | TEXT    | ISO timestamp when added to Resurface                         |
-| `last_surfaced_at`  | TEXT    | ISO timestamp of last surfacing                               |
-| `surface_count`     | INTEGER | Number of times surfaced                                      |
-| `status`            | TEXT    | active/snoozed/archived/dropped                               |
-| `suppress_until`    | TEXT    | ISO timestamp for snooze expiry                               |
-| `archived_at`       | TEXT    | ISO timestamp when archived                                   |
-| `archived_to`       | TEXT    | Archive destination                                           |
-| `dropped_at`        | TEXT    | ISO timestamp when dropped                                    |
-| `fingerprint`       | TEXT    | Content hash for deduplication (unique)                       |
-| `snooze_count`      | INTEGER | Number of times snoozed                                       |
-
-**Indexes:**
-
-- Unique on `fingerprint` (deduplication)
-- On `status` (filtering)
-- On `source_item_id` (lookups)
-
-## Resurfacing Algorithm
-
-Currently implemented in `lib/server/surface.ts`:
-
-**Priority logic:**
-
-1. Never-surfaced items first
-2. Oldest-surfaced items next
-3. Category diversity (rotate categories)
-
-**Suppression:**
-
-- Snoozed items hidden until `suppress_until` expires
-- Archived/dropped items excluded
-
-**Future improvements** (planned):
-
-- Spaced repetition intervals
-- Category balancing
-- Time-of-day preferences
-- Contextual relevance scoring
-
-## API Endpoints
-
-| Endpoint                  | Method | Purpose                                         |
-| ------------------------- | ------ | ----------------------------------------------- |
-| `/api/ingest/todoist`     | POST   | Sync Todoist Inbox tasks                        |
-| `/api/enrich`             | POST   | AI-enrich items (classification, summarization) |
-| `/api/items/next`         | GET    | Get next item to surface                        |
-| `/api/items/[id]/archive` | POST   | Archive an item                                 |
-| `/api/items/[id]/drop`    | POST   | Drop (permanently hide) an item                 |
-| `/api/items/[id]/snooze`  | POST   | Snooze item for specified duration              |
 
 ## Development
 
-### Adding a New Source
-
-1. Create ingestion endpoint: `app/api/ingest/<source>/route.ts`
-2. Implement source-specific API client in `lib/server/<source>.ts`
-3. Map source data to `ResurfaceItem` type
-4. Use `getResurfaceDatabase()` to store items
-5. Add tests in `lib/server/<source>.test.ts`
-
-### Adding a New Category
-
-1. Update `ResurfaceCategory` type in `lib/server/types.ts`
-2. Update classification logic in `lib/server/classify.ts`
-3. Update CLI classification in `cli.mjs`
-4. Add UI rendering in `components/resurface-client.tsx`
-5. Add CSS category colour in `app/globals.css`
-
-### Running Against Test Data
-
-```typescript
-import { resetResurfaceDatabaseForTests } from '@/lib/server/sqlite'
-
-beforeEach(() => {
-  resetResurfaceDatabaseForTests() // Clear database for tests
-})
+```bash
+pnpm test          # 36 tests
+pnpm typecheck     # TypeScript strict mode
+pnpm lint          # ESLint
 ```
-
-## Current Status (v0.2)
-
-**Implemented:**
-
-- Todoist ingestion (unified v1 API)
-- CLI for direct capture (`cli.mjs`)
-- SQLite storage with fingerprint dedup
-- Basic resurfacing algorithm
-- Archive/drop/snooze actions
-- Heuristic classification (7 categories)
-- Dark mode UI (warm brown/cream palette)
-- Keyboard shortcuts (A/L/D/O)
-
-**Planned:**
-
-- [ ] Spaced repetition algorithm
-- [ ] Obsidian backlog import (AI-assisted batch)
-- [ ] Browser extension (Chrome/Firefox)
-- [ ] More sources (Linear, Slack saved items, browser bookmarks)
-- [ ] AI enrichment (summarisation, better categorisation)
-- [ ] Archival destinations (Obsidian, Notion, files)
-- [ ] Stats/analytics page
-- [ ] Search/filter UI
-
-## Contributing
-
-1. Create a feature branch from `master`
-2. Write tests for new functionality
-3. Run `pnpm test` and `pnpm typecheck` before committing
-4. Update this README if adding new features/endpoints
 
 ## License
 
-MIT License. See **[LICENSE](LICENSE)** for details.
-
----
-
-**Built as KAL-1071** — A tool for preventing digital hoarding by actively
-resurfacing captured ideas at optimal intervals.
+MIT
