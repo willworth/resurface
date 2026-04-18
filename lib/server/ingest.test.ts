@@ -42,7 +42,7 @@ describe('ingestExtensionCapture', () => {
     const db = getResurfaceDatabase()
     const row = db
       .prepare(
-        'SELECT source, category, title, summary, original_text FROM resurface_items WHERE id = ? LIMIT 1'
+        'SELECT source, category, title, summary, original_text, preview_site_name, preview_description, preview_image_url, preview_fetched_at FROM resurface_items WHERE id = ? LIMIT 1'
       )
       .get(result.id) as
       | {
@@ -51,6 +51,10 @@ describe('ingestExtensionCapture', () => {
           title?: string
           summary?: string | null
           original_text?: string
+          preview_site_name?: string | null
+          preview_description?: string | null
+          preview_image_url?: string | null
+          preview_fetched_at?: string | null
         }
       | undefined
 
@@ -58,6 +62,10 @@ describe('ingestExtensionCapture', () => {
     expect(row?.category).toBe('music')
     expect(row?.title).toBe('Great live set')
     expect(row?.summary).toBe('Live mix recording')
+    expect(row?.preview_site_name).toBe('youtu.be')
+    expect(row?.preview_description).toBe('Live mix recording')
+    expect(row?.preview_image_url).toBe('https://cdn.example.com/cover.jpg')
+    expect(row?.preview_fetched_at).toBeTruthy()
     expect(row?.original_text).toContain(
       'OG image: https://cdn.example.com/cover.jpg'
     )

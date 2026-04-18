@@ -54,6 +54,10 @@ export type NormalizedCaptureInput = {
   suggestedArchive?: string | null
   tags?: string[]
   title?: string | null
+  previewSiteName?: string | null
+  previewDescription?: string | null
+  previewImageUrl?: string | null
+  previewFetchedAt?: string | null
 }
 
 export type GenericIngestResult = {
@@ -167,6 +171,10 @@ function insertCapture(params: {
   suggestedArchive?: string | null
   tags?: string[]
   title?: string | null
+  previewSiteName?: string | null
+  previewDescription?: string | null
+  previewImageUrl?: string | null
+  previewFetchedAt?: string | null
 }): { persisted: boolean; itemId: string; category: ResurfaceCategory } {
   const db = getResurfaceDatabase()
   const category = params.category ?? deriveCategory(params.text, params.url)
@@ -181,6 +189,10 @@ function insertCapture(params: {
         url,
         title,
         summary,
+        preview_site_name,
+        preview_description,
+        preview_image_url,
+        preview_fetched_at,
         original_text,
         category,
         suggested_archive,
@@ -193,7 +205,7 @@ function insertCapture(params: {
         fingerprint,
         snooze_count
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     )
     .run(
@@ -201,6 +213,10 @@ function insertCapture(params: {
       params.url,
       params.title ?? deriveTitle(params.text, params.url),
       params.summary ?? null,
+      params.previewSiteName ?? null,
+      params.previewDescription ?? null,
+      params.previewImageUrl ?? null,
+      params.previewFetchedAt ?? null,
       params.text,
       category,
       params.suggestedArchive ?? deriveSuggestedArchive(category),
@@ -300,6 +316,10 @@ export function ingestStructuredCaptures(
       suggestedArchive: normalized.suggestedArchive,
       tags: normalized.tags,
       title: normalized.title,
+      previewSiteName: normalized.previewSiteName,
+      previewDescription: normalized.previewDescription,
+      previewImageUrl: normalized.previewImageUrl,
+      previewFetchedAt: normalized.previewFetchedAt,
     })
 
     if (inserted.persisted) {
@@ -448,6 +468,16 @@ export function ingestExtensionCapture(
     summary: normalizedMetaDescription,
     category: deriveCategory(originalText, normalizedUrl),
     title: normalizedTitle ?? deriveTitle(originalText, normalizedUrl),
+    previewSiteName: (() => {
+      try {
+        return new URL(normalizedUrl).hostname.replace(/^www\./, '')
+      } catch {
+        return null
+      }
+    })(),
+    previewDescription: normalizedMetaDescription,
+    previewImageUrl: normalizedOgImage,
+    previewFetchedAt: nowIso,
   })
 
   if (result.persisted) {

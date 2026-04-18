@@ -63,12 +63,9 @@ function categoryClassName(category: ResurfaceItem['category']): string {
   return map[category] ?? 'card card-link'
 }
 
-/** Try to extract a clean title from potentially messy markdown-in-title text */
 function cleanTitle(item: ResurfaceItem): string {
   const raw = item.title ?? ''
-  // Strip markdown link syntax: [text](url) → text
   const stripped = raw.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-  // If title is just the URL, use domain instead
   if (stripped === item.url || stripped === item.originalText) {
     try {
       return new URL(item.url ?? '').hostname.replace('www.', '')
@@ -79,22 +76,29 @@ function cleanTitle(item: ResurfaceItem): string {
   return stripped.trim()
 }
 
-/** Get display text — avoid showing URL twice */
 function getDescription(item: ResurfaceItem): string | null {
   const text = item.originalText ?? ''
-  // If originalText is just the URL, skip it (URL is shown separately)
   if (text === item.url) return null
-  // If it's the same as title, skip it
   if (text === item.title) return null
   return text
 }
 
-function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
-  const [open, setOpen] = useState(false)
+function CaptureComposer({
+  onCaptured,
+  inline = false,
+}: {
+  onCaptured: () => void
+  inline?: boolean
+}) {
+  const [open, setOpen] = useState(inline)
   const [text, setText] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [flash, setFlash] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (inline) setOpen(true)
+  }, [inline])
 
   const submit = useCallback(async () => {
     const trimmed = text.trim()
@@ -104,7 +108,6 @@ function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
     setFlash(null)
 
     try {
-      // Detect if it's a URL or freeform text
       const isUrl = /^https?:\/\//i.test(trimmed)
 
       const item = {
@@ -154,11 +157,11 @@ function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
         e.preventDefault()
         void submit()
       }
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && !inline) {
         setOpen(false)
       }
     },
-    [submit]
+    [inline, submit]
   )
 
   if (!open) {
@@ -175,9 +178,18 @@ function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
   }
 
   return (
-    <div className="capture-form" onKeyDown={handleKeyDown}>
+    <div
+      className={inline ? 'capture-panel' : 'capture-form'}
+      onKeyDown={handleKeyDown}
+    >
+      {inline ? (
+        <div className="capture-panel-head">
+          <h2>Capture</h2>
+          <p>Drop in a URL, note, or idea without leaving the front page.</p>
+        </div>
+      ) : null}
       <input
-        autoFocus
+        autoFocus={!inline}
         className="capture-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -200,16 +212,18 @@ function QuickCapture({ onCaptured }: { onCaptured: () => void }) {
         >
           {saving ? '…' : 'Save'}
         </button>
-        <button
-          type="button"
-          className="capture-cancel"
-          onClick={() => setOpen(false)}
-        >
-          ✕
-        </button>
-        {flash && <span className="capture-flash">{flash}</span>}
+        {!inline ? (
+          <button
+            type="button"
+            className="capture-cancel"
+            onClick={() => setOpen(false)}
+          >
+            ✕
+          </button>
+        ) : null}
+        {flash ? <span className="capture-flash">{flash}</span> : null}
       </div>
-      <span className="capture-hint">⌘↵ to save · Esc to close</span>
+      <span className="capture-hint">⌘↵ to save{inline ? '' : ' · Esc to close'}</span>
     </div>
   )
 }
@@ -263,7 +277,6 @@ export function ResurfaceClient() {
       setTransitioning(true)
       setError(null)
 
-      // Brief fade-out before loading next
       await new Promise((r) => setTimeout(r, 150))
 
       try {
@@ -366,46 +379,54 @@ export function ResurfaceClient() {
 
   return (
     <main className="page-shell">
-      <section className="stack">
-        <header className="header">
-          <div className="header-row">
+      <section className="stack home-stack">
+        <header className="header home-header">
+          <div className="home-heading">
             <h1>Resurface</h1>
-            <div className="header-right">
-              {remaining > 0 && (
-                <Link href="/items" className="remaining">
-                  {remaining} items
-                </Link>
-              )}
-              <QuickCapture onCaptured={loadNext} />
-            </div>
+            <p className="home-subtitle">
+              Review one thing at a time, keep the good stuff, and capture new
+              things the moment they cross your mind.
+            </p>
           </div>
         </header>
 
-        {loading && !transitioning && (
+        <div className="home-top-grid">
+          <Link href="/library" className="home-library-panel">
+            <span className="home-panel-kicker">Library</span>
+            <strong>{remaining} in review</strong>
+            <span>
+              Browse, search, clean up, and manage what you&apos;ve saved.
+            </span>
+          </Link>
+
+          <CaptureComposer inline onCaptured={loadNext} />
+        </div>
+
+        {loading && !transitioning ? (
           <p className="status">Loading next item…</p>
-        )}
+        ) : null}
 
-        {!loading && error && <p className="error">{error}</p>}
+        {!loading && error ? <p className="error">{error}</p> : null}
 
-        {!loading && !error && !item && (
+        {!loading && !error && !item ? (
           <div className="empty-state">
             <h2>Nothing to surface right now</h2>
-            <p>All active items are either snoozed or resolved.</p>
+            <p>Everything in review is either snoozed or already kept.</p>
           </div>
-        )}
+        ) : null}
 
-        {!loading && !error && item && (
+        {!loading && !error && item ? (
           <article
             className={`${categoryClassName(item.category)}${transitioning ? ' fading' : ''}`}
           >
             <div className="meta-row">
               <span className="badge">{CATEGORY_LABELS[item.category]}</span>
               <div className="meta-right">
-                {item.snoozeCount > 0 && (
+                {item.snoozeCount > 0 ? (
                   <span className="snooze-count">
                     snoozed {item.snoozeCount}/5
                   </span>
-                )}
+                ) : null}
                 <span className="saved">{daysAgoLabel(savedDaysAgo)}</span>
               </div>
             </div>
@@ -428,19 +449,19 @@ export function ResurfaceClient() {
             ) : null}
 
             <label className="archive-label" htmlFor="archive-category">
-              Archive to
+              Keep in library
             </label>
             <input
               id="archive-category"
               value={archivedTo}
               onChange={(event) => setArchivedTo(event.target.value)}
               className="archive-input"
-              placeholder="e.g. Dev Tools / AI Agents"
+              placeholder="e.g. AI tools / essays / drums"
             />
 
             {forceDecision ? (
               <p className="warning">
-                Snoozed 5 times — time to decide. Archive or drop.
+                Snoozed 5 times — time to keep it or let it go.
               </p>
             ) : null}
 
@@ -450,7 +471,7 @@ export function ResurfaceClient() {
                 className="action-archive"
                 onClick={onArchive}
               >
-                ✓ Archive
+                ✓ Keep
               </button>
 
               <div className="snooze-bar">
@@ -475,7 +496,7 @@ export function ResurfaceClient() {
 
             <div className="shortcut-cheat">
               <span>
-                <kbd>A</kbd> archive
+                <kbd>A</kbd> keep
               </span>
               <span>
                 <kbd>1</kbd> 1d
@@ -500,7 +521,7 @@ export function ResurfaceClient() {
               </span>
             </div>
           </article>
-        )}
+        ) : null}
       </section>
     </main>
   )

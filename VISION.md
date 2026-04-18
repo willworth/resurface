@@ -19,7 +19,8 @@ filling a landfill.
 This is the problem Pocket solved (before Mozilla bought it and killed it). It's
 the problem StumbleUpon solved differently (serendipitous rediscovery, but from
 curated web rather than your own saves). Resurface is both: **your own curated
-captures, resurfaced with the serendipity of StumbleUpon.**
+captures, resurfaced with the serendipity of StumbleUpon, with a library worth
+keeping.**
 
 ## What Resurface Does (v0.2, Current)
 
@@ -28,7 +29,7 @@ captures, resurfaced with the serendipity of StumbleUpon.**
   reference
 - Surfaces one item at a time, prioritising never-seen items and rotating
   categories
-- User actions: **Archive** (done with it), **Snooze** (see it later), **Drop**
+- User actions: **Keep** (save to library), **Snooze** (see it later), **Drop**
   (never again)
 - Keyboard shortcuts: A/L/D/O
 - SQLite storage with fingerprint-based deduplication
@@ -202,9 +203,10 @@ brown/cream palette.
 
 ### Design Direction
 
-- **The card is the whole UI** — resist the urge to add nav, sidebars, settings
-  panels. The constraint of one-item-at-a-time is a feature. The moment you add
-  a list view, you've recreated the graveyard.
+- **Review and library are different jobs** — the one-item card is still the
+  focus surface for attention and decisions, but the library is allowed to be a
+  real browsing and reference layer. The mistake is not having a library; the
+  mistake is letting it replace review.
 - **Typography-forward** — serif fonts, generous spacing. This is a reading
   tool, not a dashboard.
 - **Ambient, not demanding** — Resurface should feel like leafing through a
@@ -217,8 +219,8 @@ brown/cream palette.
   time. Capture velocity vs. resolution velocity. "You've surfaced 340 items,
   archived 220, dropped 80, 40 still circulating."
 - **Filter/search** — sometimes you want to find a specific saved item, not wait
-  for it to surface. But make it secondary — the primary UX is always the single
-  surfaced card.
+  for it to surface. This should be a strong library capability while the single
+  surfaced card stays the front door.
 - **Mobile-responsive** — already mostly works but could be tighter on small
   screens. Phone is a natural context for "show me something interesting."
 - **Embed previews** — for YouTube links, show a thumbnail. For articles, show
@@ -242,10 +244,10 @@ brown/cream palette.
 
 ## Open Questions
 
-- **Archive destinations**: When you "archive" an item, where does it actually
-  go? Currently it just marks it done. Could integrate with Obsidian (write to a
-  vault), Notion, or a local folder structure. The `archived_to` field exists
-  but isn't wired to anything yet.
+- **Library semantics**: When you "keep" an item, what metadata should make the
+  library genuinely useful over time? Shelves, notes, source context, thumbnails,
+  and better archive destinations are all plausible next steps. The
+  `archived_to` field exists but is still lightweight.
 - **Todoist bidirectional**: Should archiving in Resurface add a label or note
   back to Todoist? Probably not — keep it simple.
 - **Content types beyond text**: Should Resurface handle images, PDFs, audio

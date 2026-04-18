@@ -1,7 +1,5 @@
-// apps/resurface/app/items/page.tsx
-
-import { ItemsClient } from '@/components/items-client'
+import { redirect } from 'next/navigation'
 
 export default function ItemsPage() {
-  return <ItemsClient />
+  redirect('/library')
 }

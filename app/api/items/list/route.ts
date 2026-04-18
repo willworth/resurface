@@ -25,8 +25,11 @@ export async function GET(req: NextRequest) {
       snooze_count: 'snooze_count',
       last_surfaced_at: 'last_surfaced_at',
       source: 'source',
+      random: 'RANDOM()',
     }
     const orderCol = validSorts[sort] ?? 'captured_at'
+    const orderClause =
+      sort === 'random' ? 'RANDOM()' : `${orderCol} ${dir}`
 
     let rows: Record<string, unknown>[]
     let totalForStatus: number
@@ -37,7 +40,7 @@ export async function GET(req: NextRequest) {
         .prepare(
           `SELECT * FROM resurface_items WHERE status = ?
            AND (title LIKE ? OR url LIKE ? OR original_text LIKE ?)
-           ORDER BY ${orderCol} ${dir} LIMIT ? OFFSET ?`
+           ORDER BY ${orderClause} LIMIT ? OFFSET ?`
         )
         .all(status, like, like, like, limit, offset) as Record<
         string,
@@ -55,7 +58,7 @@ export async function GET(req: NextRequest) {
       rows = db
         .prepare(
           `SELECT * FROM resurface_items WHERE status = ?
-           ORDER BY ${orderCol} ${dir} LIMIT ? OFFSET ?`
+           ORDER BY ${orderClause} LIMIT ? OFFSET ?`
         )
         .all(status, limit, offset) as Record<string, unknown>[]
       totalForStatus = (
@@ -76,6 +79,12 @@ export async function GET(req: NextRequest) {
       id: row.id,
       url: row.url,
       title: row.title,
+      summary: row.summary,
+      previewSiteName: row.preview_site_name,
+      previewDescription: row.preview_description,
+      previewImageUrl: row.preview_image_url,
+      previewFetchedAt: row.preview_fetched_at,
+      originalText: row.original_text,
       category: row.category,
       source: row.source,
       status: row.status,

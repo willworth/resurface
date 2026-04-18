@@ -1,23 +1,31 @@
 # Resurface
 
-**Stop saving things you'll never look at again.**
+**Capture things. Revisit them. Keep what matters.**
 
-Resurface is a personal tool for the gap between capturing an idea and doing something with it. You save interesting links, note things to explore, bookmark articles "for later" — and then they vanish into a write-only graveyard. Pocket, Todoist inbox, browser bookmarks, notes apps: they're all the same hole.
+Resurface is a personal saved-things tool built around two modes:
 
-Resurface pulls items back out, one at a time, and asks you to make a decision: archive it somewhere useful, snooze it for later, or drop it. No infinite scroll. No backlog anxiety. One item, one decision.
+- **Review**: one resurfaced item at a time, so you actually open it, read it, try it, or decide it is not worth keeping.
+- **Library**: a secondary browsing surface for search, reference, cleanup, and long-term storage.
+
+The point is to avoid the write-only graveyard problem. You save links, ideas, quotes, videos, tools, and notes. Resurface brings them back into view, helps you make a decision, and gives you a library you can actually return to.
 
 ## How it works
 
-1. **Capture** — throw things in from anywhere: paste a URL, type an idea, sync your Todoist inbox, use the browser extension, or pipe in structured JSON.
-2. **Resurface** — the app picks an item for you using a weighted algorithm (freshness, time since last seen, category diversity, snooze history). You don't choose what to review — that's the point.
-3. **Engage** — open it. Read the article. Listen to the track. Try the tool. Actually spend time with the thing you saved. Then decide: was it worth keeping? Archive it somewhere useful, or drop it. Not ready yet? Snooze it — but the clock is ticking.
-4. **Force decision** — snooze something 5 times and the app disables snooze. You have to commit: keep it or let it go.
+1. **Capture** — paste a URL, type an idea, use the browser extension, sync Todoist, or ingest JSON/CLI input.
+2. **Review** — the app chooses something for you using a weighted resurfacing algorithm.
+3. **Engage** — open it and spend time with it.
+4. **Decide** — keep it in the library, snooze it, or drop it.
+5. **Force decision** — after 5 snoozes, the app disables snooze and makes you choose.
 
-The point isn't triage. It's *engagement*. Resurface exists to make you actually look at the things you saved, not just sort them into different piles. The archive/snooze/drop flow is there to close the loop after you've engaged — not as a substitute for it.
+Resurface is not trying to be a giant productivity suite. It is a focused tool for saved things that need re-engagement plus a practical long-term library.
 
-## What it looks like
+## Product shape
 
-The main view shows one card at a time. Press `O` to open the link — that's the primary action. Once you've looked at it, close the loop: `A` to archive, `D` to drop, or `1-5` to snooze for later. There's a quick-capture `+` button in the header and a full items list at `/items` with sorting, search, filtering by status, and pagination.
+- **Home page**: always-available capture plus the current item in review.
+- **Library**: masonry-style browsing, search, shelf filters, sorting, selection, and batch actions.
+- **Preview enrichment**: stores lightweight metadata such as site name, description, and preview image URL to make the library more useful over time.
+
+The review flow remains the center of the product, but the library is a real destination rather than a hidden admin page.
 
 ## Ingestion sources
 
@@ -42,6 +50,52 @@ Items are auto-classified into categories (link, tool, music, article, quote, id
 
 The entire backend is pure functions calling SQLite. No Redis, no Postgres, no auth layer, no external services (except Todoist if you use that integration). Runs on a single machine.
 
+## Storage model
+
+Resurface is intentionally simple:
+
+- the app server and API run in the same Next.js process
+- the canonical data store is a single SQLite database file
+- by default that file lives at:
+
+```text
+.resurface/resurface.db
+```
+
+That path is resolved relative to the machine and working copy you are running. If you run the app on your laptop, it uses the laptop's database file. If you run it on a Mac mini, it uses the Mac mini's database file.
+
+You can override the location with:
+
+```bash
+export RESURFACE_SQLITE_PATH="/absolute/path/to/resurface.db"
+```
+
+That makes the deployment model explicit:
+
+- **one machine running Resurface** = one canonical database
+- **two separate machines running Resurface** = two separate databases unless you deliberately point them at the same file
+
+If you want the Mac mini to be the source of truth, run the app there and treat local laptop runs as disposable dev instances unless you intentionally copy or point at the same database.
+
+## Is SQLite okay here?
+
+Yes. This is exactly the kind of application SQLite is good at.
+
+- The data volume is tiny by database standards.
+- Reads are fast.
+- A single-user or low-concurrency personal app is a great fit.
+- Adding a few metadata columns per item is cheap.
+- Operational overhead stays near zero.
+
+The main thing SQLite does **not** want is multiple unrelated app instances casually acting as co-equal writers to different copies of the same logical dataset. That is a deployment/operational problem, not a SQLite performance problem.
+
+Recommended approach today:
+
+- keep **one canonical writer** instance
+- back up the `.db` file occasionally
+- use local clones for UI work and development
+- move to Postgres or another networked database only if the product genuinely grows into multi-user or high-concurrency needs
+
 ## Setup
 
 ```bash
@@ -65,6 +119,14 @@ mkdir -p ~/.config/todoist && echo "your-token" > ~/.config/todoist/token
 ```bash
 export RESURFACE_SQLITE_PATH="/path/to/resurface.db"
 ```
+
+For a real day-to-day setup, the best pattern is usually:
+
+1. run Resurface on one machine you trust as canonical
+2. keep the SQLite file on that machine
+3. access the UI over Tailscale, local network, or a later hosted deployment
+
+That avoids split-brain data.
 
 ## CLI
 
@@ -107,23 +169,25 @@ Telemetry: all actions (ingest, surface, archive, snooze, drop) are logged to a 
 | `/api/ingest/todoist` | POST | Sync Todoist inbox |
 | `/api/ingest/extension` | POST | Browser extension capture |
 | `/api/ingest/twitter-bookmarks` | POST | Twitter bookmarks import |
-| `/api/enrich` | POST | AI enrichment (classification, summarisation) |
+| `/api/enrich` | POST | Preview and metadata enrichment |
 
 ## Project structure
 
 ```
 ├── app/
-│   ├── page.tsx                    # Main resurface UI
-│   ├── items/page.tsx              # Items list/table view
+│   ├── page.tsx                    # Review-first home page
+│   ├── library/page.tsx            # Library surface
+│   ├── items/page.tsx              # Redirect to /library
 │   └── api/                        # All API routes
 ├── components/
-│   ├── resurface-client.tsx        # Card view + quick capture
-│   └── items-client.tsx            # Sortable items table
+│   ├── resurface-client.tsx        # Review UI + inline capture
+│   └── items-client.tsx            # Library masonry UI
 ├── lib/server/
 │   ├── surface.ts                  # Weighted resurfacing algorithm
 │   ├── actions.ts                  # Archive, snooze, drop logic
 │   ├── ingest.ts                   # Structured ingest pipeline
 │   ├── classify.ts                 # Auto-classification
+│   ├── preview.ts                  # Preview metadata fetching
 │   ├── events.ts                   # Telemetry logging
 │   ├── snooze.ts                   # Snooze presets and calculations
 │   ├── sqlite.ts                   # Database setup
@@ -143,6 +207,8 @@ pnpm test          # 36 tests
 pnpm typecheck     # TypeScript strict mode
 pnpm lint          # ESLint
 ```
+
+For architecture and deployment notes, see [DEVELOPER.md](./DEVELOPER.md).
 
 ## License
 

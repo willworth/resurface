@@ -8,13 +8,18 @@ export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { id?: string }
+    const body = (await req.json().catch(() => ({}))) as {
+      id?: string
+      forcePreviewRefresh?: boolean
+    }
 
     if (!body.id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 })
     }
 
-    const item = enrichItem(body.id)
+    const item = await enrichItem(body.id, {
+      forcePreviewRefresh: body.forcePreviewRefresh ?? false,
+    })
 
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })

@@ -17,6 +17,10 @@ export type ResurfaceItem = {
   url: string | null
   title: string
   summary: string | null
+  previewSiteName: string | null
+  previewDescription: string | null
+  previewImageUrl: string | null
+  previewFetchedAt: string | null
   originalText: string
   category: ResurfaceCategory
   suggestedArchive: string | null

@@ -25,6 +25,10 @@ function ensureSchema(db: DatabaseSync) {
       url TEXT,
       title TEXT NOT NULL,
       summary TEXT,
+      preview_site_name TEXT,
+      preview_description TEXT,
+      preview_image_url TEXT,
+      preview_fetched_at TEXT,
       original_text TEXT NOT NULL,
       category TEXT NOT NULL,
       suggested_archive TEXT,
@@ -67,6 +71,29 @@ function ensureSchema(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_resurface_events_type_created
       ON resurface_events(event_type, created_at);
   `)
+
+  const columns = db
+    .prepare(`PRAGMA table_info(resurface_items)`)
+    .all() as Array<{ name?: string }>
+
+  const columnNames = new Set(
+    columns
+      .map((column) => column.name)
+      .filter((name): name is string => typeof name === 'string')
+  )
+
+  const previewColumns = [
+    ['preview_site_name', 'TEXT'],
+    ['preview_description', 'TEXT'],
+    ['preview_image_url', 'TEXT'],
+    ['preview_fetched_at', 'TEXT'],
+  ] as const
+
+  for (const [name, type] of previewColumns) {
+    if (!columnNames.has(name)) {
+      db.exec(`ALTER TABLE resurface_items ADD COLUMN ${name} ${type};`)
+    }
+  }
 }
 
 export function getResurfaceDatabase() {
@@ -114,6 +141,10 @@ export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
     url: (row.url as string | null) ?? null,
     title: String(row.title ?? ''),
     summary: (row.summary as string | null) ?? null,
+    previewSiteName: (row.preview_site_name as string | null) ?? null,
+    previewDescription: (row.preview_description as string | null) ?? null,
+    previewImageUrl: (row.preview_image_url as string | null) ?? null,
+    previewFetchedAt: (row.preview_fetched_at as string | null) ?? null,
     originalText: String(row.original_text ?? ''),
     category: String(row.category ?? 'reference') as ResurfaceItem['category'],
     suggestedArchive: (row.suggested_archive as string | null) ?? null,
