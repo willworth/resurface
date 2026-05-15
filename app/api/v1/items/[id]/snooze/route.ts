@@ -1,7 +1,5 @@
-// apps/resurface/app/api/items/[id]/snooze/route.ts
-
-
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { apiData, apiError, errorMessage } from '@/lib/server/api'
 import { snoozeItem } from '@/lib/server/actions'
 import { SnoozePreset } from '@/lib/server/snooze'
 
@@ -26,10 +24,7 @@ export async function POST(
     const preset = body.preset
 
     if (!preset || !ALLOWED_PRESETS.includes(preset)) {
-      return NextResponse.json(
-        { error: 'Invalid snooze preset' },
-        { status: 400 }
-      )
+      return apiError('Invalid snooze preset', 400)
     }
 
     const params = await context.params
@@ -37,18 +32,13 @@ export async function POST(
 
     if (!result.ok) {
       if (result.reason === 'force-decision-required') {
-        return NextResponse.json(
-          { error: 'Force decision required' },
-          { status: 409 }
-        )
+        return apiError('Force decision required', 409)
       }
-      return NextResponse.json({ error: 'Item not found' }, { status: 404 })
+      return apiError('Item not found', 404)
     }
 
-    return NextResponse.json({ item: result.item })
+    return apiData({ item: result.item })
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : 'Failed to snooze item'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return apiError(errorMessage(error, 'Failed to snooze item'), 500)
   }
 }

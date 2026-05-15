@@ -157,6 +157,38 @@ Telemetry: all actions (ingest, surface, archive, snooze, drop) are logged to a 
 
 ## API
 
+Resurface exposes two API surfaces:
+
+- the original web-app routes under `/api/*`
+- a stable native-client contract under `/api/v1/*`, intended for clients such as an iOS app
+
+`/api/v1/*` responses use a simple JSON envelope:
+
+```json
+{ "data": {} }
+```
+
+Errors return:
+
+```json
+{ "error": "Message" }
+```
+
+### Stable v1 API
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/v1/health` | GET | Health check plus item counts |
+| `/api/v1/items` | GET | List items with pagination, sorting, search, and status filter |
+| `/api/v1/items` | POST | Batch capture/ingest structured items |
+| `/api/v1/items/next` | GET | Next item to surface (weighted) |
+| `/api/v1/items/session` | GET | Batch of ranked items for a session |
+| `/api/v1/items/[id]/archive` | POST | Archive with optional destination |
+| `/api/v1/items/[id]/snooze` | POST | Snooze with preset (tomorrow, this-weekend, next-week, in-a-month, surprise) |
+| `/api/v1/items/[id]/drop` | POST | Drop permanently |
+
+### Legacy/web API
+
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/items/next` | GET | Next item to surface (weighted) |

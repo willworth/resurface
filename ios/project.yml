@@ -1,0 +1,25 @@
+name: Resurface
+options:
+  bundleIdPrefix: dev.willworth
+  deploymentTarget:
+    iOS: "17.0"
+targets:
+  Resurface:
+    type: application
+    platform: iOS
+    sources:
+      - Resurface
+    info:
+      path: Resurface/Info.plist
+      properties:
+        CFBundleDisplayName: Resurface
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.willworth.resurface
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: 0.1.0
