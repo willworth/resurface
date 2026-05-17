@@ -41,6 +41,5 @@ struct LibraryView: View {
             .toolbar { ResurfaceToolbar(vm: vm) }
             .refreshable { await vm.refreshLibrary() }
         }
-        .preferredColorScheme(.dark)
     }
 }

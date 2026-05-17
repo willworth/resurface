@@ -86,7 +86,7 @@ struct ItemCard: View {
                     Pill(text: "snoozed \(item.snoozeCount)")
                 }
                 if let archivedTo = item.archivedTo {
-                    Pill(text: "kept in \(archivedTo)")
+                    Pill(text: "archived in \(archivedTo)")
                 }
                 Spacer()
             }
@@ -132,6 +132,10 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Appearance") {
+                    Toggle("Light mode", isOn: $vm.useLightMode)
+                }
+
                 Section("Backend") {
                     TextField("Backend URL", text: $vm.backendURL)
                         .autocorrectionDisabled()

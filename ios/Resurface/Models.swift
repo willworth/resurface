@@ -33,7 +33,7 @@ enum ResurfaceStatus: String, CaseIterable, Identifiable, Codable {
         switch self {
         case .active: "Active"
         case .snoozed: "Snoozed"
-        case .archived: "Kept"
+        case .archived: "Archived"
         case .dropped: "Dropped"
         }
     }

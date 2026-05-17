@@ -13,7 +13,7 @@ Context:
 - Backend/API work was prepared on the Mac Mini and pushed to GitHub.
 - Resurface backend is a Next.js app with SQLite on the Mac Mini as the source of truth.
 - iOS client is intentionally a thin SwiftUI client over /api/v1. It must not create or own a local source-of-truth database.
-- Default backend URL in the iOS app is http://100.78.30.78:7790, intended to reach the Mac Mini over Tailscale. Verify/update this if the Mini's Tailscale IP differs.
+- Default backend URL in the iOS app is https://wills-mac-mini.taild4212d.ts.net:7790, intended to reach the Mac Mini over Tailscale Serve. Verify/update this if the Mini's tailnet URL differs.
 
 Before changing code:
 1. cd ~/code/resurface

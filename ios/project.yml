@@ -14,6 +14,7 @@ targets:
       properties:
         CFBundleDisplayName: Resurface
         UILaunchScreen: {}
+        UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSAppTransportSecurity:
@@ -21,5 +22,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.willworth.resurface
+        DEVELOPMENT_TEAM: BNV6853573
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.0

@@ -15,7 +15,7 @@ struct ContentView: View {
                 .tabItem { Label("Capture", systemImage: "plus.circle") }
         }
         .tint(ResurfaceStyle.accent)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(vm.preferredColorScheme)
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
         .sheet(item: selectedItemBinding) { item in
             ItemDetailView(vm: vm, item: item)

@@ -24,7 +24,7 @@ That is intentional: the app is a thin native client over the backend `/api/v1` 
 Default backend URL:
 
 ```text
-http://100.78.30.78:7790
+https://wills-mac-mini.taild4212d.ts.net:7790
 ```
 
 ## Validation already run on Mac Mini
@@ -55,7 +55,7 @@ Then:
 
 1. Select an iPhone simulator/device.
 2. Build once.
-3. Confirm the backend URL in Settings points at the Mac Mini Tailscale address and port `7790`.
+3. Confirm the backend URL in Settings points at the Mac Mini Tailscale HTTPS address and port `7790`.
 4. Run Resurface backend on the Mini:
 
 ```bash

@@ -15,7 +15,7 @@ Native SwiftUI client for Will's private Resurface system.
 Default URL:
 
 ```text
-http://100.78.30.78:7790
+https://wills-mac-mini.taild4212d.ts.net:7790
 ```
 
 The backend API is implemented in the parent repo under `app/api/v1`.

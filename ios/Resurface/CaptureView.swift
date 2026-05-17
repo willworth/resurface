@@ -13,7 +13,6 @@ struct CaptureView: View {
             .navigationTitle("Capture")
             .toolbar { ResurfaceToolbar(vm: vm) }
         }
-        .preferredColorScheme(.dark)
     }
 }
 

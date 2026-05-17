@@ -6,9 +6,10 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
-                ConnectionBanner(vm: vm)
-                introSection
                 currentSection
+                if vm.lastError != nil {
+                    ConnectionBanner(vm: vm)
+                }
                 captureSection
             }
             .resurfaceScreen()
@@ -16,25 +17,6 @@ struct HomeView: View {
             .toolbar { ResurfaceToolbar(vm: vm) }
             .refreshable { await vm.refresh() }
         }
-        .preferredColorScheme(.dark)
-    }
-
-    private var introSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Resurface")
-                    .font(ResurfaceStyle.display(34))
-                Text("One saved thing at a time. Open it, keep it, snooze it, or let it go.")
-                    .font(ResurfaceStyle.body(16))
-                    .foregroundStyle(ResurfaceStyle.muted)
-                if vm.remaining > 0 {
-                    Text("\(vm.remaining) active things are ready to review.")
-                        .font(ResurfaceStyle.mono(11))
-                        .foregroundStyle(ResurfaceStyle.accent)
-                }
-            }
-        }
-        .listRowBackground(ResurfaceStyle.panel)
     }
 
     private var currentSection: some View {
@@ -44,7 +26,7 @@ struct HomeView: View {
                     ItemCard(item: item)
 
                     if vm.forceDecision {
-                        Text("This has been snoozed enough. Keep it or drop it.")
+                        Text("This has been snoozed enough. Archive it or drop it.")
                             .font(ResurfaceStyle.body(14, weight: .semibold))
                             .foregroundStyle(ResurfaceStyle.accent)
                     }
@@ -58,7 +40,7 @@ struct HomeView: View {
                             Button("Open") { vm.openURL(for: item) }
                                 .buttonStyle(.bordered)
                         }
-                        Button("Keep") { Task { await vm.archiveCurrent() } }
+                        Button("Archive") { Task { await vm.archiveCurrent() } }
                             .buttonStyle(.borderedProminent)
                             .tint(ResurfaceStyle.accent)
                         Button("Drop", role: .destructive) { Task { await vm.dropCurrent() } }

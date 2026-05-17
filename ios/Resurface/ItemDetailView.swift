@@ -33,7 +33,7 @@ struct ItemDetailView: View {
                     if item.url != nil {
                         Button("Open URL") { vm.openURL(for: item) }
                     }
-                    Button("Keep") {
+                    Button("Archive") {
                         Task {
                             await vm.archive(item, archivedTo: archiveDestination)
                             dismiss()
@@ -66,6 +66,5 @@ struct ItemDetailView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 }

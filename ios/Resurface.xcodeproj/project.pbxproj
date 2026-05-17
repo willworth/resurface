@@ -10,6 +10,7 @@
 		1EA852C5DCA7E303401969CF /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162C0C7A325A880BA85E742F /* APIClient.swift */; };
 		26C90328FADA6A942227F240 /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0572330E63F1BF38E0231633 /* CaptureView.swift */; };
 		3DDE24B3D988BFCC6DB5B9C6 /* ResurfaceStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9FF6B72BAFE4B3B0E46C268 /* ResurfaceStyle.swift */; };
+		68C85F22FDF8D2B08C37EFF0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 732CC356FD86F06D15FFF15C /* Assets.xcassets */; };
 		7D6BD5549BD553CD15792989 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7F1E8ED444EBEE8BB0D38A6 /* Components.swift */; };
 		8625F9964C4BBDA568BE1608 /* ItemDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 544F591B023527A1BB066CC7 /* ItemDetailView.swift */; };
 		92FFDD7DA43ADCDE8E21948E /* ResurfaceApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 277D2D1109B71F80DE795CDA /* ResurfaceApp.swift */; };
@@ -29,6 +30,7 @@
 		4CACE5087BDFDB5A4A2D1CB1 /* Resurface.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Resurface.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		54294BEE372D94E40BDD6068 /* ResurfaceViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResurfaceViewModel.swift; sourceTree = "<group>"; };
 		544F591B023527A1BB066CC7 /* ItemDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemDetailView.swift; sourceTree = "<group>"; };
+		732CC356FD86F06D15FFF15C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7E182BD36472246B69536610 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		AFCCD24076FED3B001C96723 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		D1AEA68CB11804DEC2A09122 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -41,6 +43,7 @@
 			isa = PBXGroup;
 			children = (
 				162C0C7A325A880BA85E742F /* APIClient.swift */,
+				732CC356FD86F06D15FFF15C /* Assets.xcassets */,
 				0572330E63F1BF38E0231633 /* CaptureView.swift */,
 				F7F1E8ED444EBEE8BB0D38A6 /* Components.swift */,
 				D1AEA68CB11804DEC2A09122 /* ContentView.swift */,
@@ -80,6 +83,7 @@
 			buildConfigurationList = 3E516F4513C8EB90DE3874BF /* Build configuration list for PBXNativeTarget "Resurface" */;
 			buildPhases = (
 				153F67948936D28FD86A7917 /* Sources */,
+				760D45CC2E09EB26DA74373C /* Resources */,
 			);
 			buildRules = (
 			);
@@ -100,9 +104,13 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					59619CE55AA0FC270166E427 = {
+						DevelopmentTeam = BNV6853573;
+					};
+				};
 			};
 			buildConfigurationList = 92857005D58B5FE5F6D12AE4 /* Build configuration list for PBXProject "Resurface" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -112,6 +120,7 @@
 			mainGroup = 747C1B4CEE012095E54D29BE;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			productRefGroup = 2B36127737F0E0C55B15B00A /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -119,6 +128,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		760D45CC2E09EB26DA74373C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				68C85F22FDF8D2B08C37EFF0 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		153F67948936D28FD86A7917 /* Sources */ = {
@@ -148,6 +168,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BNV6853573;
 				INFOPLIST_FILE = Resurface/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -166,6 +187,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = BNV6853573;
 				INFOPLIST_FILE = Resurface/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

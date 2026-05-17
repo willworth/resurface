@@ -8,7 +8,8 @@ import AppKit
 
 @MainActor
 final class ResurfaceViewModel: ObservableObject {
-    @AppStorage("resurfaceBackendURL") var backendURL = "http://100.78.30.78:7790"
+    @AppStorage("resurfaceBackendURL") var backendURL = "https://wills-mac-mini.taild4212d.ts.net:7790"
+    private static let lightModeKey = "resurfaceUseLightMode"
 
     @Published var health: HealthPayload?
     @Published var current: ResurfaceItem?
@@ -24,11 +25,18 @@ final class ResurfaceViewModel: ObservableObject {
     @Published var lastError: String?
     @Published var isLoading = false
     @Published var showSettings = false
+    @Published var useLightMode: Bool {
+        didSet {
+            UserDefaults.standard.set(useLightMode, forKey: Self.lightModeKey)
+        }
+    }
 
     private let captureDraftKey = "resurfaceCaptureDraft"
     private var client: ResurfaceAPIClient { ResurfaceAPIClient(backendURL: backendURL) }
+    var preferredColorScheme: ColorScheme { useLightMode ? .light : .dark }
 
     init() {
+        useLightMode = UserDefaults.standard.bool(forKey: Self.lightModeKey)
         captureDraft = Self.loadCaptureDraft(key: captureDraftKey)
     }
 
@@ -102,7 +110,7 @@ final class ResurfaceViewModel: ObservableObject {
                 archivedTo: destination?.isEmpty == true ? nil : destination
             )
             selectedItem = selectedItem?.id == item.id ? updated : selectedItem
-            status = "Kept"
+            status = "Archived"
             lastError = nil
             await refresh()
         } catch {
