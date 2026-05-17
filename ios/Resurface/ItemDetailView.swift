@@ -26,26 +26,18 @@ struct ItemDetailView: View {
                 }
                 .listRowBackground(ResurfaceStyle.card)
 
-                Section("Actions") {
-                    TextField("Archive destination", text: $archiveDestination)
-                        .autocorrectionDisabled()
-
-                    if item.url != nil {
-                        Button("Open URL") { vm.openURL(for: item) }
-                    }
-                    Button("Archive") {
-                        Task {
-                            await vm.archive(item, archivedTo: archiveDestination)
-                            dismiss()
+                if item.url != nil {
+                    Section("Open") {
+                        Button {
+                            vm.openURL(for: item)
+                        } label: {
+                            Label("Open URL", systemImage: "safari")
                         }
                     }
-                    Button("Drop", role: .destructive) {
-                        Task {
-                            await vm.drop(item)
-                            dismiss()
-                        }
-                    }
+                    .listRowBackground(ResurfaceStyle.panel)
+                }
 
+                Section("Snooze") {
                     ForEach(SnoozePreset.allCases) { preset in
                         Button("Snooze: \(preset.label)") {
                             Task {
@@ -54,6 +46,29 @@ struct ItemDetailView: View {
                             }
                         }
                         .disabled(item.snoozeCount >= 5)
+                    }
+                }
+                .listRowBackground(ResurfaceStyle.panel)
+
+                Section("Archive") {
+                    TextField("Archive destination", text: $archiveDestination)
+                        .autocorrectionDisabled()
+
+                    Button("Archive") {
+                        Task {
+                            await vm.archive(item, archivedTo: archiveDestination)
+                            dismiss()
+                        }
+                    }
+                }
+                .listRowBackground(ResurfaceStyle.panel)
+
+                Section("Drop") {
+                    Button("Drop", role: .destructive) {
+                        Task {
+                            await vm.drop(item)
+                            dismiss()
+                        }
                     }
                 }
                 .listRowBackground(ResurfaceStyle.panel)

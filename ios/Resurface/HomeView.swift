@@ -2,6 +2,9 @@ import SwiftUI
 
 struct HomeView: View {
     @ObservedObject var vm: ResurfaceViewModel
+    private let snoozeColumns = [
+        GridItem(.adaptive(minimum: 116), spacing: 8)
+    ]
 
     var body: some View {
         NavigationStack {
@@ -31,31 +34,68 @@ struct HomeView: View {
                             .foregroundStyle(ResurfaceStyle.accent)
                     }
 
-                    TextField("Archive destination", text: $vm.archiveDestination)
-                        .autocorrectionDisabled()
-                        .textFieldStyle(.roundedBorder)
-
-                    HStack(spacing: 10) {
-                        if item.url != nil {
-                            Button("Open") { vm.openURL(for: item) }
-                                .buttonStyle(.bordered)
+                    if item.url != nil {
+                        Button {
+                            vm.openURL(for: item)
+                        } label: {
+                            Label("Open", systemImage: "safari")
+                                .frame(maxWidth: .infinity)
                         }
-                        Button("Archive") { Task { await vm.archiveCurrent() } }
-                            .buttonStyle(.borderedProminent)
-                            .tint(ResurfaceStyle.accent)
-                        Button("Drop", role: .destructive) { Task { await vm.dropCurrent() } }
-                            .buttonStyle(.bordered)
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
                     }
 
                     if !vm.forceDecision {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Snooze")
+                                .font(ResurfaceStyle.mono(11))
+                                .foregroundStyle(ResurfaceStyle.muted)
+
+                            LazyVGrid(columns: snoozeColumns, alignment: .leading, spacing: 8) {
                                 ForEach(SnoozePreset.allCases) { preset in
-                                    Button(preset.label) { Task { await vm.snoozeCurrent(preset) } }
-                                        .buttonStyle(.bordered)
+                                    Button {
+                                        Task { await vm.snoozeCurrent(preset) }
+                                    } label: {
+                                        Text(preset.label)
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.large)
                                 }
                             }
                         }
+                    }
+
+                    Divider()
+                        .padding(.vertical, 2)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Done with this")
+                            .font(ResurfaceStyle.mono(11))
+                            .foregroundStyle(ResurfaceStyle.muted)
+
+                        TextField("Archive destination", text: $vm.archiveDestination)
+                            .autocorrectionDisabled()
+                            .textFieldStyle(.roundedBorder)
+
+                        Button {
+                            Task { await vm.archiveCurrent() }
+                        } label: {
+                            Label("Archive", systemImage: "archivebox")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(ResurfaceStyle.accent)
+
+                        Button(role: .destructive) {
+                            Task { await vm.dropCurrent() }
+                        } label: {
+                            Label("Drop", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
                     }
                 }
             } else {
