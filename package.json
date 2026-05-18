@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "cli": "node cli.mjs",
     "ingest:json": "node scripts/ingest-structured.mjs",
-    "ingest:twitter": "node scripts/ingest-twitter-bookmarks.mjs"
+    "ingest:twitter": "node scripts/ingest-twitter-bookmarks.mjs",
+    "ingest:birdclaw": "node scripts/import-birdclaw-bookmarks.mjs"
   },
   "dependencies": {
     "next": "15.3.4",
