@@ -1,4 +1,4 @@
-// apps/resurface/extension/popup.js
+// extension/popup.js
 
 /* global browser, chrome */
 

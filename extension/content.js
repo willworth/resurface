@@ -1,4 +1,4 @@
-// apps/resurface/extension/content.js
+// extension/content.js
 
 /* global chrome */
 

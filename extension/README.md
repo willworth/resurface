@@ -16,16 +16,25 @@ Resurface.
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked**
-4. Select this directory: `apps/resurface/extension`
+4. Select this directory: `~/code/resurface/extension`
+
+## Load in Helium
+
+Helium is Chromium-based, so it uses the same unpacked-extension flow.
+
+1. Open `chrome://extensions`
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select this directory: `~/code/resurface/extension`
 
 ## Load in Firefox
 
 1. Open `about:debugging#/runtime/this-firefox`
 2. Click **Load Temporary Add-on**
-3. Select `apps/resurface/extension/manifest.json`
+3. Select `~/code/resurface/extension/manifest.json`
 
 ## Default Endpoint
 
-`http://localhost:7790/api/ingest/extension`
+`https://wills-mac-mini.taild4212d.ts.net:7790/api/ingest/extension`
 
 Update it from the popup if your Resurface server runs elsewhere.
