@@ -37,6 +37,7 @@ The review flow remains the center of the product, but the library is a real des
 | **Browser extension** | Chrome/Firefox MV3 extension captures current page with selection and metadata |
 | **Structured JSON** | `POST /api/ingest/json` — batch ingest from any source |
 | **Twitter bookmarks** | `POST /api/ingest/twitter-bookmarks` — import from Twitter export |
+| **Birdclaw bookmarks** | `pnpm ingest:birdclaw` — sync/export local Birdclaw bookmarks and import them into Resurface |
 | **Obsidian vault** | `node cli.mjs obsidian` — bulk import from configured vault markdown files |
 
 Items are auto-classified into categories (link, tool, music, article, quote, idea, reference) with suggested archive destinations. Deduplication via SHA-256 content fingerprinting.
