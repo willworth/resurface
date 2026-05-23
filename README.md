@@ -129,6 +129,20 @@ For a real day-to-day setup, the best pattern is usually:
 
 That avoids split-brain data.
 
+## Desktop shell
+
+Resurface can also be wrapped as a small Electron desktop shell, the same way
+Ledger is.
+
+That shell is intentionally narrow:
+
+- it opens the Mini-hosted Resurface web app in a native window
+- it does not run a local SQLite-backed Resurface instance
+- it does not sync or copy the database
+- it is only a desktop wrapper around the canonical remote service
+
+See `desktop/README.md` for build and install details.
+
 ## CLI
 
 The CLI writes directly to SQLite — no server needed. Good for scripts and AI agents.

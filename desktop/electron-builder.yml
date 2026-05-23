@@ -1,0 +1,16 @@
+appId: com.willworth.resurface.desktop
+productName: Resurface
+asar: true
+
+directories:
+  output: desktop/dist
+
+files:
+  - desktop/main.js
+  - package.json
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dir
+    - dmg

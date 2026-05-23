@@ -8,6 +8,7 @@
 
 # build
 /dist
+/desktop/dist/
 
 # debug
 npm-debug.log*
