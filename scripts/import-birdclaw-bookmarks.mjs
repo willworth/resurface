@@ -8,11 +8,12 @@ const DEFAULT_BASE_URL = process.env.RESURFACE_BASE_URL ?? 'http://127.0.0.1:779
 function usage() {
   console.error(`Usage: node scripts/import-birdclaw-bookmarks.mjs [options]
 
-Imports X/Twitter bookmarks from Birdclaw into Resurface.
+Imports X/Twitter bookmarks into Resurface.
 
 Options:
   --limit <n>          Max bookmarks to export/import (default: 100)
   --query <text>       Optional Birdclaw search query before --bookmarked filter
+  --source <source>    auto, birdclaw, or twitter-cli (default: auto)
   --input <file>       Read Birdclaw search JSON from a file instead of invoking birdclaw
   --base-url <url>     Resurface base URL (default: RESURFACE_BASE_URL or ${DEFAULT_BASE_URL})
   --dry-run            Print normalized Resurface payload instead of posting
@@ -22,6 +23,8 @@ Options:
 
 Default behavior runs a live Birdclaw bookmark sync first. This deliberately avoids
 accidentally importing Birdclaw's demo/local seed rows into Resurface.
+If Birdclaw live sync fails in auto mode, the script falls back to the local
+twitter CLI, which reads the authenticated browser session directly.
 `)
 }
 
@@ -29,6 +32,7 @@ function parseArgs(argv) {
   const options = {
     limit: 100,
     query: '',
+    source: 'auto',
     input: null,
     baseUrl: DEFAULT_BASE_URL,
     dryRun: false,
@@ -46,6 +50,9 @@ function parseArgs(argv) {
       case '--query':
       case '-q':
         options.query = argv[++i] ?? ''
+        break
+      case '--source':
+        options.source = argv[++i] ?? 'auto'
         break
       case '--input':
       case '-i':
@@ -76,6 +83,10 @@ function parseArgs(argv) {
 
   if (!Number.isFinite(options.limit) || options.limit < 1) {
     console.error('--limit must be a positive number')
+    process.exit(2)
+  }
+  if (!['auto', 'birdclaw', 'twitter-cli'].includes(options.source)) {
+    console.error('--source must be one of: auto, birdclaw, twitter-cli')
     process.exit(2)
   }
 
@@ -138,6 +149,24 @@ function normalizeBirdclawItem(item) {
   }
 }
 
+function normalizeTwitterCliItem(item) {
+  const tweetId = String(item.id ?? '').trim()
+  const text = String(item.text ?? '').trim()
+
+  if (!tweetId || !text) return null
+
+  const authorHandle = normalizeHandle(item.author?.screenName ?? item.author?.handle)
+  const cleanHandle = authorHandle ? authorHandle.replace(/^@/, '') : 'i/web'
+
+  return {
+    tweetId,
+    text,
+    url: `https://x.com/${cleanHandle}/status/${tweetId}`,
+    authorHandle,
+    capturedAt: item.createdAt,
+  }
+}
+
 function normalizeItems(raw) {
   const items = Array.isArray(raw) ? raw : raw.items ?? raw.bookmarks ?? raw.data ?? []
   if (!Array.isArray(items)) {
@@ -149,6 +178,26 @@ function normalizeItems(raw) {
 
   for (const item of items) {
     const mapped = normalizeBirdclawItem(item)
+    if (!mapped) continue
+    if (seen.has(mapped.tweetId)) continue
+    seen.add(mapped.tweetId)
+    normalized.push(mapped)
+  }
+
+  return normalized
+}
+
+function normalizeTwitterCliItems(raw) {
+  const items = Array.isArray(raw) ? raw : raw.data ?? raw.items ?? raw.bookmarks ?? []
+  if (!Array.isArray(items)) {
+    throw new Error('twitter CLI JSON did not contain an array, .data, .items, or .bookmarks')
+  }
+
+  const seen = new Set()
+  const normalized = []
+
+  for (const item of items) {
+    const mapped = normalizeTwitterCliItem(item)
     if (!mapped) continue
     if (seen.has(mapped.tweetId)) continue
     seen.add(mapped.tweetId)
@@ -180,40 +229,67 @@ async function postToResurface(baseUrl, bookmarks) {
   return body
 }
 
+function readBirdclawBookmarks(options) {
+  run('birdclaw', ['--version'])
+
+  if (options.sync) {
+    const syncLimit = Math.max(5, Math.min(100, options.limit))
+    console.error(`Syncing up to ${syncLimit} Birdclaw bookmarks before export...`)
+    run('birdclaw', [
+      'sync',
+      'bookmarks',
+      '--mode',
+      'auto',
+      '--limit',
+      String(syncLimit),
+      '--refresh',
+      '--json',
+    ])
+  } else if (!options.allowLocalCache) {
+    console.error('Refusing to import from Birdclaw cache without a live sync. Use --allow-local-cache if you know the cache is real.')
+    process.exit(2)
+  }
+
+  const args = ['search', 'tweets']
+  if (options.query) args.push(options.query)
+  args.push('--bookmarked', '--limit', String(options.limit), '--json')
+  return normalizeItems(readJsonFromCommand('birdclaw', args))
+}
+
+function readTwitterCliBookmarks(options) {
+  if (options.query) {
+    console.error('Warning: --query is only supported for Birdclaw search; ignoring it for twitter-cli source.')
+  }
+  console.error(`Fetching up to ${options.limit} live bookmarks via local twitter CLI...`)
+  const raw = readJsonFromCommand('/Users/willworth/.local/bin/twitter', [
+    'bookmarks',
+    '--max',
+    String(options.limit),
+    '--json',
+  ])
+  return normalizeTwitterCliItems(raw)
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
 
-  let raw
+  let bookmarks
   if (options.input) {
-    raw = JSON.parse(fs.readFileSync(options.input, 'utf8'))
+    bookmarks = normalizeItems(JSON.parse(fs.readFileSync(options.input, 'utf8')))
   } else {
-    run('birdclaw', ['--version'])
-
-    if (options.sync) {
-      const syncLimit = Math.max(5, Math.min(100, options.limit))
-      console.error(`Syncing up to ${syncLimit} Birdclaw bookmarks before export...`)
-      run('birdclaw', [
-        'sync',
-        'bookmarks',
-        '--mode',
-        'auto',
-        '--limit',
-        String(syncLimit),
-        '--refresh',
-        '--json',
-      ])
-    } else if (!options.allowLocalCache) {
-      console.error('Refusing to import from Birdclaw cache without a live sync. Use --allow-local-cache if you know the cache is real.')
-      process.exit(2)
+    if (options.source === 'twitter-cli') {
+      bookmarks = readTwitterCliBookmarks(options)
+    } else {
+      try {
+        bookmarks = readBirdclawBookmarks(options)
+      } catch (error) {
+        if (options.source === 'birdclaw') throw error
+        console.error(`Birdclaw live bookmark read failed; falling back to twitter-cli.\n${error.message}`)
+        bookmarks = readTwitterCliBookmarks(options)
+      }
     }
-
-    const args = ['search', 'tweets']
-    if (options.query) args.push(options.query)
-    args.push('--bookmarked', '--limit', String(options.limit), '--json')
-    raw = readJsonFromCommand('birdclaw', args)
   }
 
-  const bookmarks = normalizeItems(raw)
   const payload = { bookmarks }
 
   if (options.dryRun) {
