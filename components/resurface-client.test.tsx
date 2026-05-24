@@ -1,6 +1,7 @@
 // apps/resurface/components/resurface-client.test.tsx
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
 import { ResurfaceClient } from './resurface-client'
 
 const baseItem = {
@@ -74,6 +75,7 @@ describe('ResurfaceClient keyboard shortcuts', () => {
   }
 
   beforeEach(() => {
+    window.localStorage.clear()
     installFetch(false)
   })
 
@@ -145,5 +147,36 @@ describe('ResurfaceClient keyboard shortcuts', () => {
     expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       fetchCountBefore
     )
+  })
+
+  it('shows cached data and disables writes when the next item cannot load', async () => {
+    window.localStorage.setItem(
+      'resurface:read-cache:next-item',
+      JSON.stringify({
+        cachedAt: '2026-05-24T12:00:00.000Z',
+        payload: {
+          item: baseItem,
+          forceDecision: false,
+          remaining: 10,
+        },
+      })
+    )
+
+    global.fetch = vi.fn(async () => {
+      throw new Error('network down')
+    }) as typeof fetch
+
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+    expect(
+      screen.getByText(/Showing last cached item/)
+    ).toHaveTextContent('Writes are disabled')
+
+    expect(screen.getByRole('button', { name: /Keep/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Drop/ })).toBeDisabled()
+
+    fireEvent.keyDown(window, { key: 'a' })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
   })
 })

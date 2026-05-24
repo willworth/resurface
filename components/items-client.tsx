@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { readCachedPayload, writeCachedPayload } from '@/lib/client/read-cache'
 
 type SnoozePreset =
   | 'tomorrow'
@@ -59,6 +60,10 @@ type SortCol =
   | 'source'
   | 'random'
 type ActionKind = 'keep' | 'drop' | 'snooze'
+
+function listCacheKey(params: URLSearchParams): string {
+  return `resurface:read-cache:list:${params.toString()}`
+}
 
 function OpenInNewIcon() {
   return (
@@ -210,6 +215,8 @@ export function ItemsClient() {
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null)
+  const [showingCachedData, setShowingCachedData] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [menuItemId, setMenuItemId] = useState<string | null>(null)
   const [batchSnoozeOpen, setBatchSnoozeOpen] = useState(false)
@@ -220,6 +227,7 @@ export function ItemsClient() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setActionError(null)
     const params = new URLSearchParams({
       status,
       sort,
@@ -227,15 +235,45 @@ export function ItemsClient() {
       page: String(page),
       ...(search ? { q: search } : {}),
     })
+    const cacheKey = listCacheKey(params)
+
     try {
       const res = await fetch(`/api/items/list?${params}`)
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Unable to load library')
+      }
+
       const data = (await res.json()) as ListResponse
+      writeCachedPayload(cacheKey, data)
       setItems(data.items)
       setCounts(data.counts)
       setTotalPages(data.totalPages)
       setTotal(data.total)
-    } catch {
-      // swallow
+      setCacheNotice(null)
+      setShowingCachedData(false)
+    } catch (error) {
+      const cached = readCachedPayload<ListResponse>(cacheKey)
+
+      if (cached) {
+        const when = new Date(cached.cachedAt).toLocaleString()
+        setItems(cached.payload.items)
+        setCounts(cached.payload.counts)
+        setTotalPages(cached.payload.totalPages)
+        setTotal(cached.payload.total)
+        setCacheNotice(
+          `Showing cached library data from ${when}. Writes are disabled until Resurface reconnects.`
+        )
+        setShowingCachedData(true)
+      } else {
+        setActionError(
+          error instanceof Error ? error.message : 'Unable to load library'
+        )
+        setCacheNotice(null)
+        setShowingCachedData(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -351,6 +389,10 @@ export function ItemsClient() {
   const performAction = useCallback(
     async (targetItems: ListItem[], action: ActionKind, preset?: SnoozePreset) => {
       if (targetItems.length === 0) return
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
 
       setActionBusy(true)
       setActionError(null)
@@ -401,12 +443,16 @@ export function ItemsClient() {
         setActionBusy(false)
       }
     },
-    [load]
+    [load, showingCachedData]
   )
 
   const reEnrichItems = useCallback(
     async (targetItems: ListItem[]) => {
       if (targetItems.length === 0) return
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
 
       setActionBusy(true)
       setActionError(null)
@@ -441,7 +487,7 @@ export function ItemsClient() {
         setActionBusy(false)
       }
     },
-    [load]
+    [load, showingCachedData]
   )
 
   const sortOptions: SortCol[] = [
@@ -520,7 +566,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => void reEnrichItems(items)}
-                    disabled={actionBusy || items.length === 0}
+                    disabled={actionBusy || showingCachedData || items.length === 0}
                   >
                     Re-enrich visible cards
                   </button>
@@ -528,7 +574,11 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => void reEnrichItems(visibleYouTubeGithub)}
-                    disabled={actionBusy || visibleYouTubeGithub.length === 0}
+                    disabled={
+                      actionBusy ||
+                      showingCachedData ||
+                      visibleYouTubeGithub.length === 0
+                    }
                   >
                     Refresh YouTube/GitHub cards
                   </button>
@@ -564,7 +614,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => void performAction(selectedItems, 'keep')}
-                    disabled={actionBusy}
+                    disabled={actionBusy || showingCachedData}
                   >
                     Keep
                   </button>
@@ -576,7 +626,7 @@ export function ItemsClient() {
                       type="button"
                       className="batch-action-btn"
                       onClick={() => setBatchSnoozeOpen((current) => !current)}
-                      disabled={actionBusy}
+                      disabled={actionBusy || showingCachedData}
                     >
                       Snooze
                     </button>
@@ -594,7 +644,7 @@ export function ItemsClient() {
                                 option.value
                               )
                             }
-                            disabled={actionBusy}
+                            disabled={actionBusy || showingCachedData}
                           >
                             {option.label}
                           </button>
@@ -609,7 +659,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn batch-danger-btn"
                     onClick={() => void performAction(selectedItems, 'drop')}
-                    disabled={actionBusy}
+                    disabled={actionBusy || showingCachedData}
                   >
                     Drop
                   </button>
@@ -685,6 +735,8 @@ export function ItemsClient() {
             />
           </div>
         </header>
+
+        {cacheNotice ? <p className="cache-warning">{cacheNotice}</p> : null}
 
         {actionError ? <p className="error">{actionError}</p> : null}
 
@@ -766,7 +818,7 @@ export function ItemsClient() {
                                 onClick={() =>
                                   void performAction([item], 'keep')
                                 }
-                                disabled={actionBusy}
+                                disabled={actionBusy || showingCachedData}
                               >
                                 Keep
                               </button>
@@ -787,7 +839,7 @@ export function ItemsClient() {
                                         option.value
                                       )
                                     }
-                                    disabled={actionBusy}
+                                    disabled={actionBusy || showingCachedData}
                                   >
                                     {option.label}
                                   </button>
@@ -802,7 +854,7 @@ export function ItemsClient() {
                                 onClick={() =>
                                   void performAction([item], 'drop')
                                 }
-                                disabled={actionBusy}
+                                disabled={actionBusy || showingCachedData}
                               >
                                 Drop
                               </button>

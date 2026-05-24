@@ -136,7 +136,8 @@ body {
 }
 
 .status,
-.error {
+.error,
+.cache-warning {
   border-radius: 0.75rem;
   padding: 0.75rem 1rem;
   background: rgba(24, 37, 52, 0.85);
@@ -145,6 +146,11 @@ body {
 
 .error {
   color: var(--danger);
+}
+
+.cache-warning {
+  color: var(--snooze);
+  border-color: rgba(209, 176, 115, 0.55);
 }
 
 .empty-state {

@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { readCachedPayload, writeCachedPayload } from '@/lib/client/read-cache'
 import { SnoozePreset } from '@/lib/server/snooze'
 import { ResurfaceItem } from '@/lib/server/types'
 
@@ -12,6 +13,8 @@ type NextItemResponse = {
   forceDecision: boolean
   remaining: number
 }
+
+const NEXT_ITEM_CACHE_KEY = 'resurface:read-cache:next-item'
 
 const SNOOZE_SHORTCUTS: Array<{
   key: string
@@ -86,9 +89,11 @@ function getDescription(item: ResurfaceItem): string | null {
 function CaptureComposer({
   onCaptured,
   inline = false,
+  disabled = false,
 }: {
   onCaptured: () => void
   inline?: boolean
+  disabled?: boolean
 }) {
   const [open, setOpen] = useState(inline)
   const [text, setText] = useState('')
@@ -194,21 +199,21 @@ function CaptureComposer({
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste a URL or type an idea…"
-        disabled={saving}
+        disabled={saving || disabled}
       />
       <input
         className="capture-notes"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
         placeholder="Notes (optional)"
-        disabled={saving}
+        disabled={saving || disabled}
       />
       <div className="capture-actions">
         <button
           type="button"
           className="capture-save"
           onClick={submit}
-          disabled={saving || !text.trim()}
+          disabled={saving || disabled || !text.trim()}
         >
           {saving ? '…' : 'Save'}
         </button>
@@ -234,6 +239,8 @@ export function ResurfaceClient() {
   const [remaining, setRemaining] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null)
+  const [showingCachedData, setShowingCachedData] = useState(false)
   const [archivedTo, setArchivedTo] = useState('')
   const [transitioning, setTransitioning] = useState(false)
 
@@ -251,16 +258,35 @@ export function ResurfaceClient() {
       }
 
       const payload = (await response.json()) as NextItemResponse
+      writeCachedPayload(NEXT_ITEM_CACHE_KEY, payload)
       setItem(payload.item)
       setForceDecision(payload.forceDecision)
       setRemaining(payload.remaining)
       setArchivedTo(payload.item?.suggestedArchive ?? '')
+      setCacheNotice(null)
+      setShowingCachedData(false)
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : 'Unexpected error'
-      )
-      setItem(null)
-      setForceDecision(false)
+      const cached = readCachedPayload<NextItemResponse>(NEXT_ITEM_CACHE_KEY)
+
+      if (cached) {
+        const when = new Date(cached.cachedAt).toLocaleString()
+        setItem(cached.payload.item)
+        setForceDecision(cached.payload.forceDecision)
+        setRemaining(cached.payload.remaining)
+        setArchivedTo(cached.payload.item?.suggestedArchive ?? '')
+        setCacheNotice(
+          `Showing last cached item from ${when}. Writes are disabled until Resurface reconnects.`
+        )
+        setShowingCachedData(true)
+      } else {
+        setError(
+          nextError instanceof Error ? nextError.message : 'Unexpected error'
+        )
+        setItem(null)
+        setForceDecision(false)
+        setCacheNotice(null)
+        setShowingCachedData(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -273,6 +299,10 @@ export function ResurfaceClient() {
   const takeAction = useCallback(
     async (endpoint: string, body: Record<string, unknown> = {}) => {
       if (!item) return
+      if (showingCachedData) {
+        setError('Writes are disabled while showing cached data.')
+        return
+      }
 
       setTransitioning(true)
       setError(null)
@@ -304,7 +334,7 @@ export function ResurfaceClient() {
         setTransitioning(false)
       }
     },
-    [item, loadNext]
+    [item, loadNext, showingCachedData]
   )
 
   const onArchive = useCallback(() => {
@@ -340,6 +370,7 @@ export function ResurfaceClient() {
       }
 
       if (!item) return
+      if (showingCachedData) return
 
       const key = event.key.toLowerCase()
 
@@ -364,7 +395,7 @@ export function ResurfaceClient() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [forceDecision, item, onArchive, onDrop, onOpen, onSnooze])
+  }, [forceDecision, item, onArchive, onDrop, onOpen, onSnooze, showingCachedData])
 
   const savedDaysAgo = useMemo(
     () => (item ? daysAgo(item.capturedAt) : 0),
@@ -399,11 +430,19 @@ export function ResurfaceClient() {
             </span>
           </Link>
 
-          <CaptureComposer inline onCaptured={loadNext} />
+          <CaptureComposer
+            inline
+            onCaptured={loadNext}
+            disabled={showingCachedData}
+          />
         </div>
 
         {loading && !transitioning ? (
           <p className="status">Loading next item…</p>
+        ) : null}
+
+        {!loading && cacheNotice ? (
+          <p className="cache-warning">{cacheNotice}</p>
         ) : null}
 
         {!loading && error ? <p className="error">{error}</p> : null}
@@ -457,6 +496,7 @@ export function ResurfaceClient() {
               onChange={(event) => setArchivedTo(event.target.value)}
               className="archive-input"
               placeholder="e.g. AI tools / essays / drums"
+              disabled={showingCachedData}
             />
 
             {forceDecision ? (
@@ -470,6 +510,7 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-archive"
                 onClick={onArchive}
+                disabled={showingCachedData}
               >
                 ✓ Keep
               </button>
@@ -479,7 +520,7 @@ export function ResurfaceClient() {
                   <button
                     key={preset.value}
                     type="button"
-                    disabled={forceDecision}
+                    disabled={forceDecision || showingCachedData}
                     className="snooze-btn"
                     onClick={() => onSnooze(preset.value)}
                     title={preset.label}
@@ -489,7 +530,12 @@ export function ResurfaceClient() {
                 ))}
               </div>
 
-              <button type="button" className="action-drop" onClick={onDrop}>
+              <button
+                type="button"
+                className="action-drop"
+                onClick={onDrop}
+                disabled={showingCachedData}
+              >
                 ✕ Drop
               </button>
             </div>
