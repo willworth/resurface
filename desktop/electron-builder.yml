@@ -11,6 +11,7 @@ files:
 
 mac:
   category: public.app-category.productivity
+  icon: desktop/build/icon.icns
   target:
     - dir
     - dmg
