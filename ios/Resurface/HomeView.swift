@@ -34,15 +34,28 @@ struct HomeView: View {
                             .foregroundStyle(ResurfaceStyle.accent)
                     }
 
-                    if item.url != nil {
-                        Button {
-                            vm.openURL(for: item)
-                        } label: {
-                            Label("Open", systemImage: "safari")
-                                .frame(maxWidth: .infinity)
+                    if let shareURL = item.shareURL {
+                        HStack(spacing: 10) {
+                            Button {
+                                vm.openURL(for: item)
+                            } label: {
+                                Label("Open", systemImage: "safari")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+
+                            ShareLink(
+                                item: shareURL,
+                                subject: Text(item.title),
+                                message: Text(item.title)
+                            ) {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
                         }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
                     }
 
                     if !vm.forceDecision {

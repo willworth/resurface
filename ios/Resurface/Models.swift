@@ -88,7 +88,71 @@ struct ResurfaceItem: Identifiable, Decodable, Hashable {
 
     var displayURL: String? {
         guard let url, let parsed = URL(string: url) else { return url }
+        if let githubLabel = Self.githubDisplayURL(for: parsed) {
+            return githubLabel
+        }
+        if let youtubeLabel = Self.youtubeDisplayURL(for: parsed) {
+            return youtubeLabel
+        }
         return parsed.host()?.replacingOccurrences(of: "www.", with: "") ?? url
+    }
+
+    var shareURL: URL? {
+        guard let url else { return nil }
+        return URL(string: url)
+    }
+
+    private static func githubDisplayURL(for url: URL) -> String? {
+        guard url.host()?.lowercased().replacingOccurrences(of: "www.", with: "") == "github.com" else {
+            return nil
+        }
+
+        let components = url.pathComponents.filter { $0 != "/" }
+        guard components.count >= 2 else { return "github.com" }
+
+        let owner = components[0]
+        let repo = components[1].replacingOccurrences(of: ".git", with: "")
+        guard !owner.isEmpty, !repo.isEmpty else { return "github.com" }
+
+        if components.count >= 4, ["issues", "pull"].contains(components[2]) {
+            let kind = components[2] == "pull" ? "PR" : "issue"
+            return "github.com/\(owner)/\(repo) · \(kind) #\(components[3])"
+        }
+
+        return "github.com/\(owner)/\(repo)"
+    }
+
+    private static func youtubeDisplayURL(for url: URL) -> String? {
+        guard let host = url.host()?.lowercased().replacingOccurrences(of: "www.", with: "") else {
+            return nil
+        }
+
+        let components = url.pathComponents.filter { $0 != "/" }
+
+        if host == "youtu.be", let videoID = components.first, !videoID.isEmpty {
+            return "youtube.com/watch/\(videoID)"
+        }
+
+        guard ["youtube.com", "m.youtube.com"].contains(host) else {
+            return nil
+        }
+
+        if let handle = components.first, handle.hasPrefix("@") {
+            return "youtube.com/\(handle)"
+        }
+
+        if components.first == "watch",
+           let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+           let videoID = queryItems.first(where: { $0.name == "v" })?.value,
+           !videoID.isEmpty {
+            return "youtube.com/watch/\(videoID)"
+        }
+
+        if components.count >= 2, ["shorts", "playlist"].contains(components[0]) {
+            return "youtube.com/\(components[0])/\(components[1])"
+        }
+
+        return "youtube.com"
     }
 
     var excerpt: String? {
