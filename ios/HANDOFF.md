@@ -51,6 +51,15 @@ xcodegen generate
 open Resurface.xcodeproj
 ```
 
+For routine iPhone re-sign/reinstall, use the repo script instead:
+
+```bash
+cd ~/code/resurface
+scripts/install-iphone.sh
+```
+
+Use `scripts/install-iphone.sh --no-launch` when the goal is only to refresh the development install before opening the app manually on the phone.
+
 Then:
 
 1. Select an iPhone simulator/device.

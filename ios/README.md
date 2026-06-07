@@ -31,3 +31,14 @@ open Resurface.xcodeproj
 ```
 
 The Mac Mini can edit and lightly syntax-check source, but final simulator/device builds should happen on the MacBook with full Xcode installed.
+
+## Install on Will's iPhone
+
+On the M1 MacBook, with the iPhone connected, trusted, and unlocked:
+
+```bash
+cd ~/code/resurface
+scripts/install-iphone.sh
+```
+
+Use `scripts/install-iphone.sh --no-launch` if you only want to refresh the development signature/install window and will open the app manually.
