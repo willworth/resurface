@@ -32,6 +32,7 @@ final class ResurfaceViewModel: ObservableObject {
     }
 
     private let captureDraftKey = "resurfaceCaptureDraft"
+    private var passedItemIds: [String] = []
     private var client: ResurfaceAPIClient { ResurfaceAPIClient(backendURL: backendURL) }
     var preferredColorScheme: ColorScheme { useLightMode ? .light : .dark }
 
@@ -50,7 +51,7 @@ final class ResurfaceViewModel: ObservableObject {
 
         do {
             async let health = client.health()
-            async let next = client.nextItem()
+            async let next = client.nextItem(excluding: passedItemIds)
             async let list = client.listItems(status: selectedStatus, query: searchText)
             self.health = try await health
             let nextPayload = try await next
@@ -137,6 +138,31 @@ final class ResurfaceViewModel: ObservableObject {
             await refresh()
         } catch {
             status = "Snooze failed"
+            lastError = error.localizedDescription
+        }
+    }
+
+    func passCurrent() async {
+        guard let item = current else { return }
+        await pass(item)
+    }
+
+    func pass(_ item: ResurfaceItem) async {
+        if !passedItemIds.contains(item.id) {
+            passedItemIds.append(item.id)
+        }
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let updated = try await client.pass(id: item.id)
+            selectedItem = selectedItem?.id == item.id ? updated : selectedItem
+            status = "Passed"
+            lastError = nil
+            await refresh()
+        } catch {
+            passedItemIds.removeAll { $0 == item.id }
+            status = "Pass failed"
             lastError = error.localizedDescription
         }
     }

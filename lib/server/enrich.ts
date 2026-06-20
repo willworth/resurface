@@ -12,6 +12,38 @@ import { fetchPreviewMetadata } from './preview'
 import { getResurfaceDatabase, mapRowToItem } from './sqlite'
 import { ResurfaceItem } from './types'
 
+function hostLabel(url: string | null): string | null {
+  if (!url) return null
+
+  try {
+    return new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+  } catch {
+    return null
+  }
+}
+
+function isGenericTitle(title: string | null, url: string | null): boolean {
+  const normalized = title?.trim().toLowerCase()
+  if (!normalized) return true
+
+  const host = hostLabel(url)
+  const genericTitles = new Set([
+    'youtube',
+    'youtube.com',
+    'm.youtube.com',
+    'youtu.be',
+    'github',
+    'github.com',
+    'untitled capture',
+  ])
+
+  return (
+    normalized === url?.trim().toLowerCase() ||
+    normalized === host ||
+    genericTitles.has(normalized)
+  )
+}
+
 export async function enrichItem(
   id: string,
   options?: { forcePreviewRefresh?: boolean }
@@ -30,17 +62,19 @@ export async function enrichItem(
   const category = deriveCategory(current.originalText, url)
   const suggestedArchive = deriveSuggestedArchive(category)
   const tags = deriveTags(current.originalText, url)
-  const title =
-    current.title?.trim().length > 0
-      ? current.title
-      : deriveTitle(current.originalText, url)
   const shouldRefreshPreview =
     Boolean(url) &&
     (options?.forcePreviewRefresh ||
+      isGenericTitle(current.title, url) ||
       !current.previewSiteName ||
       !current.previewDescription ||
       !current.previewImageUrl)
   const preview = shouldRefreshPreview && url ? await fetchPreviewMetadata(url) : null
+  const title =
+    isGenericTitle(current.title, url)
+      ? preview?.previewTitle ??
+        (current.title?.trim() ? current.title : deriveTitle(current.originalText, url))
+      : current.title
 
   const summary =
     current.summary ??

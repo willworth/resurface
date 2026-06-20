@@ -10,8 +10,15 @@ struct ResurfaceAPIClient {
         try await request("/api/v1/health")
     }
 
-    func nextItem() async throws -> NextItemPayload {
-        try await request("/api/v1/items/next")
+    func nextItem(excluding excludedIds: [String] = []) async throws -> NextItemPayload {
+        guard !excludedIds.isEmpty else {
+            return try await request("/api/v1/items/next")
+        }
+
+        var components = URLComponents()
+        components.path = "/api/v1/items/next"
+        components.queryItems = excludedIds.map { URLQueryItem(name: "exclude", value: $0) }
+        return try await request(components.string ?? "/api/v1/items/next")
     }
 
     func session(count: Int = 10) async throws -> SessionPayload {
@@ -53,6 +60,16 @@ struct ResurfaceAPIClient {
             "/api/v1/items/\(encodePath(id))/snooze",
             method: "POST",
             body: SnoozeRequest(preset: preset)
+        )
+        return payload.item
+    }
+
+    func pass(id: String) async throws -> ResurfaceItem {
+        let empty: EmptyBody? = nil
+        let payload: ItemActionPayload = try await request(
+            "/api/v1/items/\(encodePath(id))/pass",
+            method: "POST",
+            body: empty
         )
         return payload.item
     }

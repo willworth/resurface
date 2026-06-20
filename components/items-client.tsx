@@ -162,6 +162,28 @@ function cleanTitle(title: string, url: string | null): string {
   return stripped || 'Untitled'
 }
 
+function isGenericTitle(title: string, url: string | null): boolean {
+  const stripped = title
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .trim()
+    .toLowerCase()
+
+  if (!stripped || stripped === 'untitled capture') return true
+  if (url && stripped === url.trim().toLowerCase()) return true
+
+  try {
+    const host = new URL(url ?? '').hostname.replace(/^www\./, '').toLowerCase()
+    return (
+      stripped === host ||
+      ['youtube', 'youtube.com', 'm.youtube.com', 'youtu.be'].includes(stripped)
+    )
+  } catch {
+    return ['youtube', 'youtube.com', 'm.youtube.com', 'youtu.be'].includes(
+      stripped
+    )
+  }
+}
+
 function itemExcerpt(item: ListItem): string | null {
   const previewDescription = item.previewDescription?.trim()
   if (previewDescription) return previewDescription
@@ -307,8 +329,8 @@ export function ItemsClient() {
       .filter(
         (item) =>
           item.url &&
-          !item.previewDescription &&
-          !item.previewImageUrl &&
+          ((!item.previewDescription && !item.previewImageUrl) ||
+            isGenericTitle(item.title, item.url)) &&
           !enrichingIdsRef.current.has(item.id)
       )
       .slice(0, 4)
@@ -333,6 +355,7 @@ export function ItemsClient() {
           const payload = (await response.json()) as {
             item?: {
               id: string
+              title: string
               previewSiteName: string | null
               previewDescription: string | null
               previewImageUrl: string | null
@@ -347,6 +370,7 @@ export function ItemsClient() {
               entry.id === payload.item?.id
                 ? {
                     ...entry,
+                    title: payload.item.title,
                     previewSiteName: payload.item.previewSiteName,
                     previewDescription: payload.item.previewDescription,
                     previewImageUrl: payload.item.previewImageUrl,

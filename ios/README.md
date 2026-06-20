@@ -7,6 +7,7 @@ Native SwiftUI client for Will's private Resurface system.
 - Connects to the Mac Mini-hosted Resurface service over Tailscale.
 - Uses the stable Resurface `/api/v1` JSON endpoints.
 - Shows the current resurfaced item, library search/browse, and quick capture.
+- Shows a Next option for passing the current item without deciding.
 - Archives, snoozes, and drops through the backend API.
 - Does not own domain logic or a local database.
 

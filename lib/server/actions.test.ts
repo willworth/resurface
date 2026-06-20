@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { getResurfaceDatabase, resetResurfaceDatabaseForTests } from './sqlite'
-import { snoozeItem } from './actions'
+import { passItem, snoozeItem } from './actions'
 
 function setupTestDb() {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resurface-actions-'))
@@ -57,5 +57,22 @@ describe('snooze action force-decision rule', () => {
       expect(result.item.snoozeCount).toBe(2)
       expect(result.item.suppressUntil).toBeTruthy()
     }
+  })
+
+  it('logs a pass without mutating snooze or status state', () => {
+    insertItem('passable', 2)
+
+    const item = passItem('passable')
+    expect(item?.status).toBe('active')
+    expect(item?.snoozeCount).toBe(2)
+
+    const db = getResurfaceDatabase()
+    const event = db
+      .prepare(
+        `SELECT event_type, item_id FROM resurface_events WHERE item_id = ? LIMIT 1`
+      )
+      .get('passable') as { event_type: string; item_id: string } | undefined
+
+    expect(event).toEqual({ event_type: 'passed', item_id: 'passable' })
   })
 })

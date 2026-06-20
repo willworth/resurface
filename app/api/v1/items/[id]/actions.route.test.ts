@@ -8,6 +8,7 @@ import { listItems } from '@/lib/server/items'
 import { resetResurfaceDatabaseForTests } from '@/lib/server/sqlite'
 import { POST as archivePost } from './archive/route'
 import { POST as dropPost } from './drop/route'
+import { POST as passPost } from './pass/route'
 import { POST as snoozePost } from './snooze/route'
 
 let tmpDir: string
@@ -46,7 +47,7 @@ describe('/api/v1/items/:id actions', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
 
-  it('snoozes, archives, and drops through stable envelopes', async () => {
+  it('snoozes, passes, archives, and drops through stable envelopes', async () => {
     const snoozeItem = seedItem()
     const snoozeResponse = await snoozePost(
       new NextRequest(`http://localhost:7790/api/v1/items/${snoozeItem.id}/snooze`, {
@@ -58,6 +59,16 @@ describe('/api/v1/items/:id actions', () => {
     )
     expect(snoozeResponse.status).toBe(200)
     expect((await snoozeResponse.json()).data.item.snoozeCount).toBe(1)
+
+    const passableItem = seedItem()
+    const passResponse = await passPost(
+      new Request(`http://localhost:7790/api/v1/items/${passableItem.id}/pass`, {
+        method: 'POST',
+      }),
+      contextFor(passableItem.id)
+    )
+    expect(passResponse.status).toBe(200)
+    expect((await passResponse.json()).data.item.id).toBe(passableItem.id)
 
     const archiveItem = seedItem()
     const archiveResponse = await archivePost(

@@ -6,6 +6,7 @@ import { getResurfaceDatabase } from './sqlite'
 export type ResurfaceEventType =
   | 'ingested'
   | 'surfaced'
+  | 'passed'
   | 'archived'
   | 'snoozed'
   | 'dropped'

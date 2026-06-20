@@ -79,6 +79,27 @@ describe('surface ranking', () => {
     expect(next.item?.id).toBe('a')
   })
 
+  it('excludes items already passed in the current session', () => {
+    insertItem({
+      id: 'a',
+      title: 'Old research',
+      category: 'reference',
+      tags: ['research'],
+      capturedAt: '2025-01-01T00:00:00.000Z',
+      snoozeCount: 0,
+    })
+    insertItem({
+      id: 'b',
+      title: 'Second item',
+      category: 'link',
+      capturedAt: '2026-01-01T00:00:00.000Z',
+      snoozeCount: 0,
+    })
+
+    const next = getNextItemToSurface(['a'])
+    expect(next.item?.id).toBe('b')
+  })
+
   it('forces decisions when snooze count reaches threshold', () => {
     insertItem({
       id: 'force',

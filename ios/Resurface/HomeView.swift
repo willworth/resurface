@@ -29,13 +29,23 @@ struct HomeView: View {
                     ItemCard(item: item)
 
                     if vm.forceDecision {
-                        Text("This has been snoozed enough. Archive it or drop it.")
+                        Text("This has been snoozed enough. You can pass for now, but it is worth a real keep/drop decision soon.")
                             .font(ResurfaceStyle.body(14, weight: .semibold))
                             .foregroundStyle(ResurfaceStyle.accent)
                     }
 
                     if let shareURL = item.shareURL {
                         HStack(spacing: 10) {
+                            Button {
+                                Task { await vm.passCurrent() }
+                            } label: {
+                                Label("Next", systemImage: "arrow.right")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .tint(ResurfaceStyle.accent)
+
                             Button {
                                 vm.openURL(for: item)
                             } label: {
@@ -56,6 +66,16 @@ struct HomeView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.large)
                         }
+                    } else {
+                        Button {
+                            Task { await vm.passCurrent() }
+                        } label: {
+                            Label("Next", systemImage: "arrow.right")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .tint(ResurfaceStyle.accent)
                     }
 
                     if !vm.forceDecision {

@@ -94,6 +94,20 @@ export function snoozeItem(
   return { ok: true, item }
 }
 
+export function passItem(id: string): ResurfaceItem | null {
+  const item = fetchItem(id)
+  if (item) {
+    logResurfaceEvent('passed', item.id, {
+      source: item.source,
+      category: item.category,
+      snoozeCount: item.snoozeCount,
+      surfaceCount: item.surfaceCount,
+    })
+  }
+
+  return item
+}
+
 export function dropItem(id: string): ResurfaceItem | null {
   const now = new Date().toISOString()
   const db = getResurfaceDatabase()

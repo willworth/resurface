@@ -15,7 +15,7 @@ That is intentional: the app is a thin native client over the backend `/api/v1` 
 - Models matching the v1 API envelopes.
 - Shared view model patterned after `ledger-ios`.
 - Tabs:
-  - Review: current surfaced item, open/keep/snooze/drop, quick capture.
+  - Review: current surfaced item, next/pass, open/keep/snooze/drop, quick capture.
   - Library: status filter, search, item list, detail/action sheet.
   - Capture: save URL/text captures.
 - Settings sheet for backend URL.
@@ -82,6 +82,7 @@ Good v0 parity with the web app:
 - Review-first flow: yes.
 - Quick capture: yes.
 - Open saved URL: yes.
+- Next/pass without deciding: yes.
 - Keep/archive: yes.
 - Snooze presets: yes.
 - Drop: yes.

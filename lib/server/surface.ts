@@ -65,8 +65,20 @@ function listRecentCategories(limit = 3): string[] {
     .filter((value): value is string => typeof value === 'string')
 }
 
-function getCandidateRows(limit = 120): Record<string, unknown>[] {
+function getCandidateRows(
+  limit = 120,
+  excludeIds: string[] = []
+): Record<string, unknown>[] {
   const db = getResurfaceDatabase()
+  const safeExcludeIds = excludeIds
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0)
+
+  const excludeClause =
+    safeExcludeIds.length > 0
+      ? `AND id NOT IN (${safeExcludeIds.map(() => '?').join(', ')})`
+      : ''
+
   return db
     .prepare(
       `
@@ -74,10 +86,14 @@ function getCandidateRows(limit = 120): Record<string, unknown>[] {
       FROM resurface_items
       WHERE status = 'active'
         AND (suppress_until IS NULL OR suppress_until <= ?)
+        ${excludeClause}
       LIMIT ?
     `
     )
-    .all(new Date().toISOString(), limit) as Record<string, unknown>[]
+    .all(new Date().toISOString(), ...safeExcludeIds, limit) as Record<
+    string,
+    unknown
+  >[]
 }
 
 function daysSince(iso: string | null): number {
@@ -190,10 +206,12 @@ function countActiveItems(): number {
   return row.c
 }
 
-export function getNextItemToSurface(): NextSurfaceResult {
+export function getNextItemToSurface(
+  excludeIds: string[] = []
+): NextSurfaceResult {
   const chosen =
     rankCandidates(
-      getCandidateRows().map((row) => mapRowToItem(row)),
+      getCandidateRows(120, excludeIds).map((row) => mapRowToItem(row)),
       listRecentCategories(3)
     )[0] ?? null
 

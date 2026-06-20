@@ -38,7 +38,7 @@ describe('ResurfaceClient keyboard shortcuts', () => {
     global.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = String(input)
 
-      if (url === '/api/items/next') {
+      if (url.startsWith('/api/items/next')) {
         return {
           ok: true,
           json: async () => ({
@@ -65,6 +65,14 @@ describe('ResurfaceClient keyboard shortcuts', () => {
         return {
           ok: true,
           json: async () => ({ item: { ...baseItem, snoozeCount: 1 } }),
+        } as Response
+      }
+
+      if (url === '/api/items/item-1/pass') {
+        firstLoad = false
+        return {
+          ok: true,
+          json: async () => ({ item: baseItem }),
         } as Response
       }
 
@@ -122,6 +130,27 @@ describe('ResurfaceClient keyboard shortcuts', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         '/api/items/item-1/drop',
         expect.objectContaining({ method: 'POST' })
+      )
+    })
+  })
+
+  it('passes with N and excludes the item from the next load', async () => {
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+    fireEvent.keyDown(window, { key: 'n' })
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/items/item-1/pass',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/items/next?exclude=item-1',
+        expect.objectContaining({ method: 'GET' })
       )
     })
   })

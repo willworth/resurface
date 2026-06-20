@@ -243,13 +243,19 @@ export function ResurfaceClient() {
   const [showingCachedData, setShowingCachedData] = useState(false)
   const [archivedTo, setArchivedTo] = useState('')
   const [transitioning, setTransitioning] = useState(false)
+  const [passedIds, setPassedIds] = useState<string[]>([])
 
-  const loadNext = useCallback(async () => {
+  const loadNext = useCallback(async (excludeIds: string[] = []) => {
     setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch('/api/items/next', { method: 'GET' })
+      const query = new URLSearchParams()
+      for (const id of excludeIds) {
+        query.append('exclude', id)
+      }
+      const endpoint = query.size > 0 ? `/api/items/next?${query}` : '/api/items/next'
+      const response = await fetch(endpoint, { method: 'GET' })
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as {
           error?: string
@@ -323,7 +329,7 @@ export function ResurfaceClient() {
           throw new Error(payload.error ?? 'Action failed')
         }
 
-        await loadNext()
+        await loadNext(passedIds)
       } catch (actionError) {
         setError(
           actionError instanceof Error
@@ -334,7 +340,7 @@ export function ResurfaceClient() {
         setTransitioning(false)
       }
     },
-    [item, loadNext, showingCachedData]
+    [item, loadNext, passedIds, showingCachedData]
   )
 
   const onArchive = useCallback(() => {
@@ -356,6 +362,45 @@ export function ResurfaceClient() {
     },
     [item, forceDecision, takeAction]
   )
+
+  const onPass = useCallback(async () => {
+    if (!item) return
+    if (showingCachedData) {
+      setError('Writes are disabled while showing cached data.')
+      return
+    }
+
+    const nextPassedIds = [...passedIds, item.id]
+    setPassedIds(nextPassedIds)
+    setTransitioning(true)
+    setError(null)
+
+    await new Promise((r) => setTimeout(r, 100))
+
+    try {
+      const response = await fetch(`/api/items/${item.id}/pass`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Pass failed')
+      }
+
+      await loadNext(nextPassedIds)
+    } catch (passError) {
+      setPassedIds(passedIds)
+      setError(
+        passError instanceof Error ? passError.message : 'Unexpected error'
+      )
+    } finally {
+      setTransitioning(false)
+    }
+  }, [item, loadNext, passedIds, showingCachedData])
 
   const onOpen = useCallback(() => {
     if (!item?.url) return
@@ -380,6 +425,9 @@ export function ResurfaceClient() {
       } else if (key === 'd') {
         event.preventDefault()
         onDrop()
+      } else if (key === 'n' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        void onPass()
       } else if (key === 'o' && item.url) {
         event.preventDefault()
         onOpen()
@@ -395,7 +443,16 @@ export function ResurfaceClient() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [forceDecision, item, onArchive, onDrop, onOpen, onSnooze, showingCachedData])
+  }, [
+    forceDecision,
+    item,
+    onArchive,
+    onDrop,
+    onOpen,
+    onPass,
+    onSnooze,
+    showingCachedData,
+  ])
 
   const savedDaysAgo = useMemo(
     () => (item ? daysAgo(item.capturedAt) : 0),
@@ -501,11 +558,20 @@ export function ResurfaceClient() {
 
             {forceDecision ? (
               <p className="warning">
-                Snoozed 5 times — time to keep it or let it go.
+                Snoozed 5 times. You can still pass for now, but this is worth a real keep/drop decision soon.
               </p>
             ) : null}
 
             <div className="actions">
+              <button
+                type="button"
+                className="action-pass"
+                onClick={() => void onPass()}
+                disabled={showingCachedData}
+              >
+                Next
+              </button>
+
               <button
                 type="button"
                 className="action-archive"
@@ -558,6 +624,12 @@ export function ResurfaceClient() {
               </span>
               <span>
                 <kbd>5</kbd> ?
+              </span>
+              <span>
+                <kbd>N</kbd> next
+              </span>
+              <span>
+                <kbd>→</kbd> next
               </span>
               <span>
                 <kbd>D</kbd> drop

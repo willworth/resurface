@@ -1,6 +1,7 @@
 // apps/resurface/lib/server/preview.ts
 
 export type PreviewMetadata = {
+  previewTitle: string | null
   previewSiteName: string | null
   previewDescription: string | null
   previewImageUrl: string | null
@@ -41,6 +42,29 @@ function extractMetaContent(
 function extractTitle(html: string): string | null {
   const match = html.match(/<title[^>]*>([^<]+)<\/title>/i)
   return match?.[1] ? decodeHtmlEntities(match[1].trim()) : null
+}
+
+function cleanTitle(value: string | null): string | null {
+  if (!value) return null
+
+  const trimmed = value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s+-\s+YouTube$/i, '')
+
+  if (!trimmed) return null
+
+  const lowered = trimmed.toLowerCase()
+  if (
+    lowered === 'youtube' ||
+    lowered === 'youtube.com' ||
+    lowered === 'github' ||
+    lowered === 'github.com'
+  ) {
+    return null
+  }
+
+  return trimmed
 }
 
 function extractJsonLdDescriptions(html: string): string[] {
@@ -190,6 +214,7 @@ export async function fetchPreviewMetadata(
     const contentType = response.headers.get('content-type') ?? ''
     if (!response.ok || !contentType.includes('text/html')) {
       return {
+        previewTitle: null,
         previewSiteName: hostLabel(url),
         previewDescription: null,
         previewImageUrl: null,
@@ -206,6 +231,12 @@ export async function fetchPreviewMetadata(
       extractMetaContent(html, 'name', 'application-name') ??
       hostLabel(finalUrl)
 
+    const previewTitle = cleanTitle(
+      extractMetaContent(html, 'property', 'og:title') ??
+        extractMetaContent(html, 'name', 'twitter:title') ??
+        extractTitle(html)
+    )
+
     const previewDescription =
       host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be'
         ? pickYouTubeDescription(html)
@@ -221,6 +252,7 @@ export async function fetchPreviewMetadata(
     )
 
     return {
+      previewTitle,
       previewSiteName,
       previewDescription:
         previewDescription ?? extractTitle(html) ?? null,
@@ -229,6 +261,7 @@ export async function fetchPreviewMetadata(
     }
   } catch {
     return {
+      previewTitle: null,
       previewSiteName: hostLabel(url),
       previewDescription: null,
       previewImageUrl: null,
