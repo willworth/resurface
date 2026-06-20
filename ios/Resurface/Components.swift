@@ -52,21 +52,50 @@ struct ItemCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 6 : 10) {
+            ItemHeader(item: item, compact: compact)
+            ItemBody(item: item, compact: compact)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+struct ItemHeader: View {
+    let item: ResurfaceItem
+    var compact = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(item.category.uppercased())
                     .font(ResurfaceStyle.mono(10))
                     .foregroundStyle(ResurfaceStyle.accent)
                 Spacer()
-                Text(item.source.replacingOccurrences(of: "-", with: " "))
-                    .font(ResurfaceStyle.mono(10))
-                    .foregroundStyle(ResurfaceStyle.muted)
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text(item.savedDateLabel)
+                        .font(ResurfaceStyle.mono(10))
+                        .foregroundStyle(ResurfaceStyle.accent)
+                        .lineLimit(1)
+                    Text(item.source.replacingOccurrences(of: "-", with: " "))
+                        .font(ResurfaceStyle.mono(10))
+                        .foregroundStyle(ResurfaceStyle.muted)
+                        .lineLimit(1)
+                }
             }
 
             Text(item.title)
                 .font(ResurfaceStyle.display(compact ? 20 : 28))
                 .foregroundStyle(ResurfaceStyle.ink)
                 .lineLimit(compact ? 2 : 4)
+        }
+    }
+}
 
+struct ItemBody: View {
+    let item: ResurfaceItem
+    var compact = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
             if let url = item.displayURL {
                 Text(url)
                     .font(ResurfaceStyle.mono(11))
@@ -91,7 +120,6 @@ struct ItemCard: View {
                 Spacer()
             }
         }
-        .padding(.vertical, 8)
     }
 }
 

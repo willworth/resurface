@@ -11,7 +11,6 @@ struct CaptureView: View {
             }
             .resurfaceScreen()
             .navigationTitle("Capture")
-            .toolbar { ResurfaceToolbar(vm: vm) }
         }
     }
 }

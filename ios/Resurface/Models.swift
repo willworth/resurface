@@ -102,6 +102,13 @@ struct ResurfaceItem: Identifiable, Decodable, Hashable {
         return URL(string: url)
     }
 
+    var savedDateLabel: String {
+        guard let date = Self.parseDate(capturedAt) else {
+            return "Saved \(String(capturedAt.prefix(10)))"
+        }
+        return "Saved \(Self.savedDateFormatter.string(from: date))"
+    }
+
     private static func githubDisplayURL(for url: URL) -> String? {
         guard url.host()?.lowercased().replacingOccurrences(of: "www.", with: "") == "github.com" else {
             return nil
@@ -154,6 +161,25 @@ struct ResurfaceItem: Identifiable, Decodable, Hashable {
 
         return "youtube.com"
     }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: value) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
+
+    private static let savedDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter
+    }()
 
     var excerpt: String? {
         if let previewDescription, !previewDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
