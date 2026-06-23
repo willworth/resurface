@@ -10,6 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cli": "node cli.mjs",
+    "db:backup": "node scripts/backup-sqlite.mjs",
     "ingest:json": "node scripts/ingest-structured.mjs",
     "ingest:twitter": "node scripts/ingest-twitter-bookmarks.mjs",
     "ingest:birdclaw": "node scripts/import-birdclaw-bookmarks.mjs",

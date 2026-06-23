@@ -93,7 +93,7 @@ The main thing SQLite does **not** want is multiple unrelated app instances casu
 Recommended approach today:
 
 - keep **one canonical writer** instance
-- back up the `.db` file occasionally
+- back up the `.db` file occasionally with `pnpm db:backup`
 - use local clones for UI work and development
 - move to Postgres or another networked database only if the product genuinely grows into multi-user or high-concurrency needs
 
@@ -119,6 +119,13 @@ mkdir -p ~/.config/todoist && echo "your-token" > ~/.config/todoist/token
 **Optional: Custom database path**
 ```bash
 export RESURFACE_SQLITE_PATH="/path/to/resurface.db"
+```
+
+**Optional: SQLite backup**
+```bash
+pnpm db:backup
+# or:
+RESURFACE_SQLITE_PATH="/path/to/resurface.db" RESURFACE_BACKUP_DIR="/path/to/backups" pnpm db:backup
 ```
 
 For a real day-to-day setup, the best pattern is usually:

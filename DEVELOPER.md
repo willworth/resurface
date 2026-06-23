@@ -123,6 +123,18 @@ The repo ignores `.resurface/`, which is correct for local database state.
 
 If a real `.resurface/resurface.db` ever appears as a tracked file in git, that should be treated as an operational smell. The live database should not be a committed project artifact.
 
+## Backup command
+
+Use the same database-path contract for manual backups:
+
+```bash
+pnpm db:backup
+```
+
+The script reads `RESURFACE_SQLITE_PATH` when set; otherwise it uses `$WORKTREE/.resurface/resurface.db`. Backups are written beside the database under `backups/` unless `RESURFACE_BACKUP_DIR` points somewhere else.
+
+This is a point-in-time copy for the one canonical writer model. It is not a sync mechanism between multiple live databases.
+
 ## Recommended operating pattern
 
 For now:
