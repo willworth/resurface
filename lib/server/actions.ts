@@ -2,6 +2,11 @@
 
 
 import { logResurfaceEvent } from './events'
+import {
+  ArchiveLibraryOptions,
+  clampLibraryPriority,
+  normalizeLibraryShelf,
+} from './library'
 import { getResurfaceDatabase, mapRowToItem } from './sqlite'
 import { computeSnoozeUntil, SnoozePreset } from './snooze'
 import { ResurfaceItem } from './types'
@@ -21,9 +26,13 @@ function fetchItem(id: string): ResurfaceItem | null {
 
 export function archiveItem(
   id: string,
-  archivedTo: string | null
+  archivedTo: string | null,
+  options: ArchiveLibraryOptions = {}
 ): ResurfaceItem | null {
   const now = new Date().toISOString()
+  const libraryShelf = normalizeLibraryShelf(options.shelf ?? archivedTo)
+  const libraryPriority = clampLibraryPriority(options.priority)
+  const pinnedAt = options.pinned ? now : null
   const db = getResurfaceDatabase()
 
   db.prepare(
@@ -32,15 +41,21 @@ export function archiveItem(
     SET status = 'archived',
         archived_at = ?,
         archived_to = ?,
+        library_shelf = ?,
+        library_priority = ?,
+        pinned_at = ?,
         suppress_until = NULL
     WHERE id = ?
   `
-  ).run(now, archivedTo, id)
+  ).run(now, archivedTo, libraryShelf, libraryPriority, pinnedAt, id)
 
   const item = fetchItem(id)
   if (item) {
     logResurfaceEvent('archived', item.id, {
       archivedTo,
+      libraryShelf,
+      libraryPriority,
+      pinned: Boolean(pinnedAt),
       source: item.source,
       category: item.category,
     })

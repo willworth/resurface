@@ -74,13 +74,32 @@ describe('/api/v1/items/:id actions', () => {
     const archiveResponse = await archivePost(
       new NextRequest(`http://localhost:7790/api/v1/items/${archiveItem.id}/archive`, {
         method: 'POST',
-        body: JSON.stringify({ archivedTo: 'reading' }),
+        body: JSON.stringify({
+          archivedTo: 'Reading / Longform',
+          priority: 3,
+          pinned: true,
+        }),
         headers: { 'Content-Type': 'application/json' },
       }),
       contextFor(archiveItem.id)
     )
     expect(archiveResponse.status).toBe(200)
-    expect((await archiveResponse.json()).data.item.archivedTo).toBe('reading')
+    const archiveBody = await archiveResponse.json()
+    expect(archiveBody.data.item).toMatchObject({
+      archivedTo: 'Reading / Longform',
+      libraryShelf: 'reading-longform',
+      libraryPriority: 3,
+      status: 'archived',
+    })
+    expect(archiveBody.data.item.pinnedAt).toBeTruthy()
+
+    const archivedList = listItems({
+      status: 'archived',
+      shelf: 'reading-longform',
+      sort: 'library_priority',
+    })
+    expect(archivedList.total).toBe(1)
+    expect(archivedList.items[0].id).toBe(archiveItem.id)
 
     const dropItem = seedItem()
     const dropResponse = await dropPost(

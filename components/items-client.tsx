@@ -40,6 +40,9 @@ type ListItem = {
   suppressUntil: string | null
   suggestedArchive: string | null
   archivedTo: string | null
+  libraryShelf: string | null
+  libraryPriority: number
+  pinnedAt: string | null
   tags: string[]
 }
 
@@ -57,6 +60,8 @@ type SortCol =
   | 'title'
   | 'category'
   | 'snooze_count'
+  | 'library_priority'
+  | 'pinned_at'
   | 'source'
   | 'random'
 type ActionKind = 'keep' | 'drop' | 'snooze'
@@ -208,6 +213,8 @@ function sortLabel(col: SortCol): string {
     title: 'Title',
     category: 'Category',
     snooze_count: 'Snoozes',
+    library_priority: 'Priority',
+    pinned_at: 'Pinned',
     source: 'Source',
     random: 'Random',
   }
@@ -519,6 +526,8 @@ export function ItemsClient() {
     'random',
     'title',
     'category',
+    'library_priority',
+    'pinned_at',
     'snooze_count',
     'source',
   ]

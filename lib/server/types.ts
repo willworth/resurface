@@ -35,6 +35,9 @@ export type ResurfaceItem = {
   suppressUntil: string | null
   archivedAt: string | null
   archivedTo: string | null
+  libraryShelf: string | null
+  libraryPriority: number
+  pinnedAt: string | null
   droppedAt: string | null
   fingerprint: string
   snoozeCount: number

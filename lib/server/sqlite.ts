@@ -43,6 +43,9 @@ function ensureSchema(db: DatabaseSync) {
       suppress_until TEXT,
       archived_at TEXT,
       archived_to TEXT,
+      library_shelf TEXT,
+      library_priority INTEGER NOT NULL DEFAULT 0,
+      pinned_at TEXT,
       dropped_at TEXT,
       fingerprint TEXT NOT NULL,
       snooze_count INTEGER NOT NULL DEFAULT 0
@@ -87,6 +90,9 @@ function ensureSchema(db: DatabaseSync) {
     ['preview_description', 'TEXT'],
     ['preview_image_url', 'TEXT'],
     ['preview_fetched_at', 'TEXT'],
+    ['library_shelf', 'TEXT'],
+    ['library_priority', 'INTEGER NOT NULL DEFAULT 0'],
+    ['pinned_at', 'TEXT'],
   ] as const
 
   for (const [name, type] of previewColumns) {
@@ -159,6 +165,9 @@ export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
     suppressUntil: (row.suppress_until as string | null) ?? null,
     archivedAt: (row.archived_at as string | null) ?? null,
     archivedTo: (row.archived_to as string | null) ?? null,
+    libraryShelf: (row.library_shelf as string | null) ?? null,
+    libraryPriority: Number(row.library_priority ?? 0),
+    pinnedAt: (row.pinned_at as string | null) ?? null,
     droppedAt: (row.dropped_at as string | null) ?? null,
     fingerprint: String(row.fingerprint ?? ''),
     snoozeCount: Number(row.snooze_count ?? 0),

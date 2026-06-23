@@ -100,7 +100,7 @@ Important item fields:
 - capture data: `url`, `title`, `original_text`, `source`
 - classification data: `category`, `suggested_archive`, `tags_json`
 - review state: `status`, `suppress_until`, `snooze_count`, `last_surfaced_at`
-- library state: `archived_at`, `archived_to`
+- library state: `archived_at`, `archived_to`, `library_shelf`, `library_priority`, `pinned_at`
 - preview metadata: `preview_site_name`, `preview_description`, `preview_image_url`, `preview_fetched_at`
 
 Preview metadata is intentionally lightweight. We store text and URLs, not downloaded image blobs.

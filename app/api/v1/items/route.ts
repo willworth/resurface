@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
         sort: params.get('sort'),
         dir: params.get('dir'),
         search: params.get('q'),
+        shelf: params.get('shelf'),
         limit: Number(params.get('limit') ?? '50'),
         page: Number(params.get('page') ?? '1'),
       })

@@ -9,9 +9,18 @@ export async function POST(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const body = (await req.json().catch(() => ({}))) as { archivedTo?: string }
+    const body = (await req.json().catch(() => ({}))) as {
+      archivedTo?: string
+      shelf?: string
+      priority?: number
+      pinned?: boolean
+    }
     const params = await context.params
-    const item = archiveItem(params.id, body.archivedTo ?? null)
+    const item = archiveItem(params.id, body.archivedTo ?? null, {
+      shelf: body.shelf,
+      priority: body.priority,
+      pinned: body.pinned,
+    })
 
     if (!item) {
       return apiError('Item not found', 404)

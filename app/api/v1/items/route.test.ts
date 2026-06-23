@@ -53,6 +53,9 @@ describe('/api/v1/items', () => {
       title: 'iOS capture',
       source: 'ios-test',
       url: 'https://example.com/ios',
+      libraryPriority: 0,
+      libraryShelf: null,
+      pinnedAt: null,
     })
   })
 

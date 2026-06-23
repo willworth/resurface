@@ -14,6 +14,9 @@ const SORT_COLUMNS: Record<string, string> = {
   category: 'category',
   snooze_count: 'snooze_count',
   last_surfaced_at: 'last_surfaced_at',
+  library_shelf: 'library_shelf',
+  library_priority: 'library_priority',
+  pinned_at: 'pinned_at',
   source: 'source',
   random: 'RANDOM()',
 }
@@ -23,6 +26,7 @@ export type ItemListOptions = {
   sort?: string | null
   dir?: string | null
   search?: string | null
+  shelf?: string | null
   limit?: number | null
   page?: number | null
 }
@@ -63,6 +67,7 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
   const sort = options.sort ?? 'captured_at'
   const dir = options.dir === 'asc' ? 'ASC' : 'DESC'
   const search = options.search?.trim() || null
+  const shelf = options.shelf?.trim() || null
   const safeLimit = Math.max(1, Math.min(Number(options.limit ?? 50), 200))
   const safePage = Math.max(1, Number(options.page ?? 1))
   const offset = (safePage - 1) * safeLimit
@@ -73,25 +78,38 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
   let rows: Record<string, unknown>[]
   let total: number
 
+  const where = ['status = ?']
+  const values: Array<string | number> = [status]
+
+  if (shelf) {
+    where.push('library_shelf = ?')
+    values.push(shelf)
+  }
+
   if (search) {
+    where.push('(title LIKE ? OR url LIKE ? OR original_text LIKE ?)')
     const like = `%${search}%`
+    values.push(like, like, like)
+  }
+
+  const whereClause = where.join(' AND ')
+
+  if (search || shelf) {
     rows = db
       .prepare(
-        `SELECT * FROM resurface_items WHERE status = ?
-         AND (title LIKE ? OR url LIKE ? OR original_text LIKE ?)
+        `SELECT * FROM resurface_items WHERE ${whereClause}
          ORDER BY ${orderClause} LIMIT ? OFFSET ?`
       )
-      .all(status, like, like, like, safeLimit, offset) as Record<
+      .all(...values, safeLimit, offset) as Record<
       string,
       unknown
     >[]
     total = (
       db
         .prepare(
-          `SELECT COUNT(*) as c FROM resurface_items WHERE status = ?
-           AND (title LIKE ? OR url LIKE ? OR original_text LIKE ?)`
+          `SELECT COUNT(*) as c FROM resurface_items WHERE ${whereClause}`
         )
-        .get(status, like, like, like) as { c: number }
+        .get(...values) as { c: number }
     ).c
   } else {
     rows = db
