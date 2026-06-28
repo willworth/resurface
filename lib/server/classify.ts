@@ -197,7 +197,26 @@ export function deriveTitle(content: string, url: string | null): string {
   if (url) {
     try {
       const parsed = new URL(url)
-      return parsed.hostname.replace(/^www\./, '')
+      const host = parsed.hostname.replace(/^www\./, '')
+      const pathParts = parsed.pathname
+        .split('/')
+        .filter((part) => part.length > 0)
+        .map((part) => decodeURIComponent(part))
+
+      if (host === 'github.com') {
+        if (pathParts.length >= 2) {
+          return `${pathParts[0]}/${pathParts[1].replace(/\.git$/i, '')}`
+        }
+        if (pathParts.length === 1) {
+          return `github.com/${pathParts[0]}`
+        }
+      }
+
+      if (host === 'gist.github.com' && pathParts.length >= 1) {
+        return `gist.github.com/${pathParts.slice(0, 2).join('/')}`
+      }
+
+      return host
     } catch {
       return url
     }

@@ -36,6 +36,26 @@ function insertGenericYouTubeItem() {
   )
 }
 
+function insertGenericGitHubItem() {
+  const db = getResurfaceDatabase()
+  db.prepare(
+    `
+    INSERT INTO resurface_items (
+      id, url, title, original_text, category, tags_json, source, captured_at,
+      ingested_at, status, fingerprint, snooze_count
+    ) VALUES (?, ?, ?, ?, 'tool', '["github.com"]', 'ios-test', ?, ?, 'active', ?, 0)
+  `
+  ).run(
+    'gh-1',
+    'https://github.com/Uzaaft/awesome-libghostty',
+    'github.com',
+    'https://github.com/Uzaaft/awesome-libghostty',
+    '2026-01-01T00:00:00.000Z',
+    '2026-01-01T00:00:00.000Z',
+    'fp-gh-1'
+  )
+}
+
 describe('enrichItem metadata repair', () => {
   beforeEach(() => {
     setupTestDb()
@@ -82,5 +102,20 @@ describe('enrichItem metadata repair', () => {
     expect(item?.previewImageUrl).toBe(
       'https://i.ytimg.com/vi/abc123/hqdefault.jpg'
     )
+  })
+
+  it('falls back to specific GitHub path titles when preview fetch fails', async () => {
+    insertGenericGitHubItem()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network unavailable')
+      })
+    )
+
+    const item = await enrichItem('gh-1')
+
+    expect(item?.title).toBe('Uzaaft/awesome-libghostty')
+    expect(item?.previewSiteName).toBe('github.com')
   })
 })

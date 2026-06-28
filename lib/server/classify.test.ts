@@ -4,6 +4,7 @@
 import {
   buildFingerprint,
   deriveCategory,
+  deriveTitle,
   extractUrl,
   isCapture,
   normalizeUrl,
@@ -31,6 +32,21 @@ describe('classify', () => {
     expect(deriveCategory('Great live version', 'https://youtu.be/abc')).toBe(
       'music'
     )
+  })
+
+  it('derives specific titles from GitHub URLs', () => {
+    expect(
+      deriveTitle('', 'https://github.com/Uzaaft/awesome-libghostty')
+    ).toBe('Uzaaft/awesome-libghostty')
+    expect(deriveTitle('', 'https://github.com/SantanderAI')).toBe(
+      'github.com/SantanderAI'
+    )
+    expect(
+      deriveTitle(
+        '',
+        'https://github.com/mattpocock/skills/tree/main/skills/in-progress/teach'
+      )
+    ).toBe('mattpocock/skills')
   })
 
   it('creates deterministic fingerprints', () => {

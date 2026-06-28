@@ -73,7 +73,7 @@ export async function enrichItem(
   const title =
     isGenericTitle(current.title, url)
       ? preview?.previewTitle ??
-        (current.title?.trim() ? current.title : deriveTitle(current.originalText, url))
+        deriveTitle(current.originalText, url)
       : current.title
 
   const summary =
