@@ -3,6 +3,7 @@
 /* global browser, chrome */
 
 const INGEST_PATH = '/api/ingest/extension'
+const LEGACY_LOCAL_ENDPOINT = `http://localhost:7790${INGEST_PATH}`
 const DEFAULT_ENDPOINT = `https://wills-mac-mini.taild4212d.ts.net:7790${INGEST_PATH}`
 
 function extensionApi() {
@@ -46,6 +47,15 @@ function getEndpointUrl(api) {
         stored.endpointUrl.trim().length > 0
           ? stored.endpointUrl.trim()
           : DEFAULT_ENDPOINT
+      if (rawValue === LEGACY_LOCAL_ENDPOINT) {
+        api.storage.local.set({ endpointUrl: DEFAULT_ENDPOINT })
+        resolve({
+          endpointUrl: DEFAULT_ENDPOINT,
+          resetFromInvalid: true,
+          invalidEndpointUrl: rawValue,
+        })
+        return
+      }
       try {
         resolve({
           endpointUrl: normalizeEndpointUrl(rawValue),
