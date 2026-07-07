@@ -10,6 +10,8 @@ export type ResurfaceEventType =
   | 'archived'
   | 'snoozed'
   | 'dropped'
+  | 'pinned'
+  | 'unpinned'
 
 export function logResurfaceEvent(
   eventType: ResurfaceEventType,

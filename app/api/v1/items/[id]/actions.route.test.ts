@@ -9,6 +9,7 @@ import { resetResurfaceDatabaseForTests } from '@/lib/server/sqlite'
 import { POST as archivePost } from './archive/route'
 import { POST as dropPost } from './drop/route'
 import { POST as passPost } from './pass/route'
+import { POST as pinPost } from './pin/route'
 import { POST as snoozePost } from './snooze/route'
 
 let tmpDir: string
@@ -100,6 +101,27 @@ describe('/api/v1/items/:id actions', () => {
     })
     expect(archivedList.total).toBe(1)
     expect(archivedList.items[0].id).toBe(archiveItem.id)
+
+    const starItem = seedItem()
+    const starResponse = await pinPost(
+      new NextRequest(`http://localhost:7790/api/v1/items/${starItem.id}/pin`, {
+        method: 'POST',
+        body: JSON.stringify({ pinned: true }),
+        headers: { 'Content-Type': 'application/json' },
+      }),
+      contextFor(starItem.id)
+    )
+    expect(starResponse.status).toBe(200)
+    const starBody = await starResponse.json()
+    expect(starBody.data.item.pinnedAt).toBeTruthy()
+    expect(starBody.data.item.libraryPriority).toBe(5)
+
+    const starredList = listItems({
+      status: 'all',
+      pinned: true,
+      sort: 'pinned_at',
+    })
+    expect(starredList.items.some((item) => item.id === starItem.id)).toBe(true)
 
     const dropItem = seedItem()
     const dropResponse = await dropPost(

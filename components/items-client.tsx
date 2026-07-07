@@ -122,6 +122,20 @@ function MoreIcon() {
   )
 }
 
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
+      <path
+        d="m10 3.3 1.9 3.9 4.3.6-3.1 3 .7 4.2-3.8-2-3.8 2 .7-4.2-3.1-3 4.3-.6L10 3.3Z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.45"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 function CogIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
@@ -286,17 +300,21 @@ export function ItemsClient() {
   const [utilitiesOpen, setUtilitiesOpen] = useState(false)
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState('')
+  const [initialQueryLoaded, setInitialQueryLoaded] = useState(false)
   const enrichingIdsRef = useRef<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
     setActionError(null)
+    const apiStatus = status === 'starred' ? 'all' : status
     const params = new URLSearchParams({
-      status,
+      status: apiStatus,
       sort,
       dir,
       page: String(page),
       ...(search ? { q: search } : {}),
+      ...(status === 'starred' ? { pinned: '1' } : {}),
     })
     const cacheKey = listCacheKey(params)
 
@@ -343,6 +361,29 @@ export function ItemsClient() {
   }, [status, sort, dir, search, page])
 
   useEffect(() => {
+    if (initialQueryLoaded) return
+    const params = new URLSearchParams(window.location.search)
+    const query = params.get('q') ?? ''
+    const nextStatus = params.get('status')
+
+    if (query) {
+      setSearchInput(query)
+      setSearch(query)
+    }
+
+    if (
+      nextStatus &&
+      ['active', 'archived', 'starred', 'snoozed', 'dropped'].includes(
+        nextStatus
+      )
+    ) {
+      setStatus(nextStatus)
+    }
+
+    setInitialQueryLoaded(true)
+  }, [initialQueryLoaded])
+
+  useEffect(() => {
     setPage(1)
     setSelectedIds([])
     setMenuItemId(null)
@@ -350,14 +391,15 @@ export function ItemsClient() {
   }, [status, search])
 
   useEffect(() => {
+    if (!initialQueryLoaded) return
     void load()
-  }, [load])
+  }, [initialQueryLoaded, load])
 
-  const [searchInput, setSearchInput] = useState('')
   useEffect(() => {
+    if (!initialQueryLoaded) return
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
-  }, [searchInput])
+  }, [initialQueryLoaded, searchInput])
 
   useEffect(() => {
     setSelectedIds((current) =>
@@ -450,6 +492,42 @@ export function ItemsClient() {
     if (!item.url) return
     window.open(item.url, '_blank', 'noopener,noreferrer')
   }
+
+  const toggleStar = useCallback(
+    async (item: ListItem) => {
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
+
+      setActionBusy(true)
+      setActionError(null)
+
+      try {
+        const response = await fetch(`/api/items/${item.id}/pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pinned: !item.pinnedAt }),
+        })
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Could not update star')
+        }
+
+        await load()
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : 'Could not update star'
+        )
+      } finally {
+        setActionBusy(false)
+      }
+    },
+    [load, showingCachedData]
+  )
 
   const performAction = useCallback(
     async (targetItems: ListItem[], action: ActionKind, preset?: SnoozePreset) => {
@@ -582,7 +660,7 @@ export function ItemsClient() {
   })
 
   return (
-    <main className="page-shell">
+    <main className="page-shell items-page-shell">
       <section className="items-container">
         <header className="items-header">
           <div className="items-title-row">
@@ -648,6 +726,16 @@ export function ItemsClient() {
                     }
                   >
                     Refresh YouTube/GitHub cards
+                  </button>
+                  <button
+                    type="button"
+                    className="batch-action-btn"
+                    onClick={() => {
+                      setStatus('dropped')
+                      setUtilitiesOpen(false)
+                    }}
+                  >
+                    View dropped bin
                   </button>
                 </div>
 
@@ -751,17 +839,31 @@ export function ItemsClient() {
             <div className="items-control-group">
               <span className="control-label">Shelf</span>
               <div className="status-tabs">
-                {['active', 'archived', 'dropped', 'snoozed'].map((s) => (
+                {[
+                  ['active', 'Active'],
+                  ['archived', 'Kept'],
+                  ['starred', 'Starred'],
+                  ['snoozed', 'Snoozed'],
+                ].map(([s, label]) => (
                   <button
                     key={s}
                     type="button"
                     className={`tab ${status === s ? 'tab-active' : ''}`}
                     onClick={() => setStatus(s)}
                   >
-                    {s} {counts[s] != null ? `(${counts[s]})` : ''}
+                    {label}{' '}
+                    {s !== 'starred' && counts[s] != null
+                      ? `(${counts[s]})`
+                      : ''}
                   </button>
                 ))}
               </div>
+              {status === 'dropped' ? (
+                <p className="dropped-bin-note">
+                  Dropped items are hidden from normal browsing. This bin exists
+                  only for audit/recovery.
+                </p>
+              ) : null}
             </div>
 
             <div className="items-control-group">
@@ -842,6 +944,16 @@ export function ItemsClient() {
                           <OpenInNewIcon />
                         </button>
                       ) : null}
+
+                      <button
+                        type="button"
+                        className={`card-icon-btn star-card-btn${item.pinnedAt ? ' card-icon-btn-active star-card-btn-active' : ''}`}
+                        title={item.pinnedAt ? 'Remove star' : 'Star this'}
+                        onClick={() => void toggleStar(item)}
+                        disabled={actionBusy || showingCachedData}
+                      >
+                        <StarIcon filled={Boolean(item.pinnedAt)} />
+                      </button>
 
                       <button
                         type="button"
@@ -983,6 +1095,9 @@ export function ItemsClient() {
 
                     {item.archivedTo ? (
                       <p className="archived-to">Kept in {item.archivedTo}</p>
+                    ) : null}
+                    {item.pinnedAt ? (
+                      <p className="starred-card-note">★ Starred</p>
                     ) : null}
                   </div>
 

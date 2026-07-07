@@ -27,6 +27,7 @@ export type ItemListOptions = {
   dir?: string | null
   search?: string | null
   shelf?: string | null
+  pinned?: boolean | null
   limit?: number | null
   page?: number | null
 }
@@ -61,6 +62,7 @@ export function getItemById(id: string): ResurfaceItem | null {
 }
 
 export function listItems(options: ItemListOptions = {}): ItemListResult {
+  const allOpenStatuses = options.status === 'all'
   const status = VALID_STATUSES.includes(options.status as ResurfaceStatus)
     ? (options.status as ResurfaceStatus)
     : 'active'
@@ -75,11 +77,19 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
   const orderClause = sort === 'random' ? 'RANDOM()' : `${orderCol} ${dir}`
 
   const db = getResurfaceDatabase()
-  let rows: Record<string, unknown>[]
-  let total: number
+  const where: string[] = []
+  const values: Array<string | number> = []
 
-  const where = ['status = ?']
-  const values: Array<string | number> = [status]
+  if (allOpenStatuses) {
+    where.push("status != 'dropped'")
+  } else {
+    where.push('status = ?')
+    values.push(status)
+  }
+
+  if (options.pinned) {
+    where.push('pinned_at IS NOT NULL')
+  }
 
   if (shelf) {
     where.push('library_shelf = ?')
@@ -94,36 +104,17 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
 
   const whereClause = where.join(' AND ')
 
-  if (search || shelf) {
-    rows = db
-      .prepare(
-        `SELECT * FROM resurface_items WHERE ${whereClause}
-         ORDER BY ${orderClause} LIMIT ? OFFSET ?`
-      )
-      .all(...values, safeLimit, offset) as Record<
-      string,
-      unknown
-    >[]
-    total = (
-      db
-        .prepare(
-          `SELECT COUNT(*) as c FROM resurface_items WHERE ${whereClause}`
-        )
-        .get(...values) as { c: number }
-    ).c
-  } else {
-    rows = db
-      .prepare(
-        `SELECT * FROM resurface_items WHERE status = ?
-         ORDER BY ${orderClause} LIMIT ? OFFSET ?`
-      )
-      .all(status, safeLimit, offset) as Record<string, unknown>[]
-    total = (
-      db
-        .prepare(`SELECT COUNT(*) as c FROM resurface_items WHERE status = ?`)
-        .get(status) as { c: number }
-    ).c
-  }
+  const rows = db
+    .prepare(
+      `SELECT * FROM resurface_items WHERE ${whereClause}
+       ORDER BY ${orderClause} LIMIT ? OFFSET ?`
+    )
+    .all(...values, safeLimit, offset) as Record<string, unknown>[]
+  const total = (
+    db
+      .prepare(`SELECT COUNT(*) as c FROM resurface_items WHERE ${whereClause}`)
+      .get(...values) as { c: number }
+  ).c
 
   return {
     items: rows.map((row) => mapRowToItem(row)),

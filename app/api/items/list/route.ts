@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
         dir: params.get('dir'),
         search: params.get('q'),
         shelf: params.get('shelf'),
+        pinned: params.get('pinned') === '1',
         limit: Number(params.get('limit') ?? '50'),
         page: Number(params.get('page') ?? '1'),
       })

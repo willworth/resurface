@@ -64,6 +64,34 @@ export function archiveItem(
   return item
 }
 
+export function pinItem(id: string, pinned: boolean): ResurfaceItem | null {
+  const now = new Date().toISOString()
+  const db = getResurfaceDatabase()
+
+  db.prepare(
+    `
+    UPDATE resurface_items
+    SET pinned_at = ?,
+        library_priority = CASE
+          WHEN ? = 1 AND library_priority < 5 THEN 5
+          ELSE library_priority
+        END
+    WHERE id = ?
+  `
+  ).run(pinned ? now : null, pinned ? 1 : 0, id)
+
+  const item = fetchItem(id)
+  if (item) {
+    logResurfaceEvent(pinned ? 'pinned' : 'unpinned', item.id, {
+      source: item.source,
+      category: item.category,
+      status: item.status,
+    })
+  }
+
+  return item
+}
+
 export type SnoozeActionResult =
   | { ok: true; item: ResurfaceItem }
   | { ok: false; reason: 'item-not-found' | 'force-decision-required' }

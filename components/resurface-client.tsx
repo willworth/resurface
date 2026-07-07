@@ -193,13 +193,14 @@ function CaptureComposer({
           <p>Drop in a URL, note, or idea without leaving the front page.</p>
         </div>
       ) : null}
-      <input
+      <textarea
         autoFocus={!inline}
         className="capture-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder="Paste a URL or type an idea…"
         disabled={saving || disabled}
+        rows={inline ? 4 : 2}
       />
       <input
         className="capture-notes"
@@ -244,6 +245,7 @@ export function ResurfaceClient() {
   const [archivedTo, setArchivedTo] = useState('')
   const [transitioning, setTransitioning] = useState(false)
   const [passedIds, setPassedIds] = useState<string[]>([])
+  const [homeSearch, setHomeSearch] = useState('')
 
   const loadNext = useCallback(async (excludeIds: string[] = []) => {
     setLoading(true)
@@ -407,6 +409,48 @@ export function ResurfaceClient() {
     window.open(item.url, '_blank', 'noopener,noreferrer')
   }, [item])
 
+  const onSearchSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault()
+      const query = homeSearch.trim()
+      const params = new URLSearchParams()
+      if (query) params.set('q', query)
+      window.location.assign(params.size > 0 ? `/library?${params}` : '/library')
+    },
+    [homeSearch]
+  )
+
+  const onToggleStar = useCallback(async () => {
+    if (!item) return
+    if (showingCachedData) {
+      setError('Writes are disabled while showing cached data.')
+      return
+    }
+
+    setError(null)
+    try {
+      const response = await fetch(`/api/items/${item.id}/pin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pinned: !item.pinnedAt }),
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Could not update star')
+      }
+
+      const payload = (await response.json()) as { item: ResurfaceItem }
+      setItem(payload.item)
+    } catch (starError) {
+      setError(
+        starError instanceof Error ? starError.message : 'Could not update star'
+      )
+    }
+  }, [item, showingCachedData])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -487,6 +531,21 @@ export function ResurfaceClient() {
             </span>
           </Link>
 
+          <form className="home-search-panel" onSubmit={onSearchSubmit}>
+            <label htmlFor="home-search">Search saved things</label>
+            <div className="home-search-row">
+              <input
+                id="home-search"
+                value={homeSearch}
+                onChange={(event) => setHomeSearch(event.target.value)}
+                placeholder="Search titles, notes, URLs…"
+              />
+              <button type="submit">Search</button>
+            </div>
+          </form>
+        </div>
+
+        <div className="home-capture-row">
           <CaptureComposer
             inline
             onCaptured={loadNext}
@@ -518,6 +577,7 @@ export function ResurfaceClient() {
             <div className="meta-row">
               <span className="badge">{CATEGORY_LABELS[item.category]}</span>
               <div className="meta-right">
+                {item.pinnedAt ? <span className="starred-label">starred</span> : null}
                 {item.snoozeCount > 0 ? (
                   <span className="snooze-count">
                     snoozed {item.snoozeCount}/5
@@ -543,6 +603,16 @@ export function ResurfaceClient() {
                 })()}
               </button>
             ) : null}
+
+            <button
+              type="button"
+              className={`star-inline-btn${item.pinnedAt ? ' star-inline-btn-active' : ''}`}
+              onClick={() => void onToggleStar()}
+              disabled={showingCachedData}
+              title={item.pinnedAt ? 'Remove star' : 'Star this'}
+            >
+              {item.pinnedAt ? '★ Starred' : '☆ Star'}
+            </button>
 
             <label className="archive-label" htmlFor="archive-category">
               Keep in library
