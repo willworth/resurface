@@ -2,7 +2,8 @@
 
 /* global browser, chrome */
 
-const DEFAULT_ENDPOINT = 'http://localhost:7790/api/ingest/extension'
+const INGEST_PATH = '/api/ingest/extension'
+const DEFAULT_ENDPOINT = `http://localhost:7790${INGEST_PATH}`
 
 function extensionApi() {
   if (typeof browser !== 'undefined') {
@@ -11,15 +12,53 @@ function extensionApi() {
   return chrome
 }
 
+function normalizeEndpointUrl(endpointUrl) {
+  const trimmed = typeof endpointUrl === 'string' ? endpointUrl.trim() : ''
+  if (!trimmed) {
+    throw new Error('Endpoint URL is required')
+  }
+
+  const parsed = new URL(trimmed)
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Endpoint must use HTTP or HTTPS')
+  }
+
+  if (parsed.pathname === '' || parsed.pathname === '/') {
+    parsed.pathname = INGEST_PATH
+  }
+
+  const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+  if (normalizedPath !== INGEST_PATH) {
+    throw new Error(`Endpoint must point to ${INGEST_PATH}`)
+  }
+
+  parsed.pathname = INGEST_PATH
+  parsed.search = ''
+  parsed.hash = ''
+  return parsed.toString()
+}
+
 function getEndpointUrl(api) {
   return new Promise((resolve) => {
     api.storage.local.get({ endpointUrl: DEFAULT_ENDPOINT }, (stored) => {
-      const value =
+      const rawValue =
         typeof stored.endpointUrl === 'string' &&
         stored.endpointUrl.trim().length > 0
           ? stored.endpointUrl.trim()
           : DEFAULT_ENDPOINT
-      resolve(value)
+      try {
+        resolve({
+          endpointUrl: normalizeEndpointUrl(rawValue),
+          resetFromInvalid: false,
+        })
+      } catch {
+        api.storage.local.set({ endpointUrl: DEFAULT_ENDPOINT })
+        resolve({
+          endpointUrl: DEFAULT_ENDPOINT,
+          resetFromInvalid: rawValue !== DEFAULT_ENDPOINT,
+          invalidEndpointUrl: rawValue,
+        })
+      }
     })
   })
 }
@@ -76,7 +115,8 @@ async function captureActiveTab(api) {
     throw new Error('Could not extract page data from the current tab')
   }
 
-  const endpointUrl = await getEndpointUrl(api)
+  const endpointState = await getEndpointUrl(api)
+  const endpointUrl = endpointState.endpointUrl
   const response = await fetch(endpointUrl, {
     method: 'POST',
     headers: {
@@ -98,6 +138,7 @@ async function captureActiveTab(api) {
 
   return {
     endpointUrl,
+    resetFromInvalid: endpointState.resetFromInvalid,
     statusCode: response.status,
     response: responseJson,
   }
@@ -123,7 +164,7 @@ extensionApi().runtime.onMessage.addListener(
 
     if (message && message.type === 'get-endpoint-url') {
       getEndpointUrl(api)
-        .then((endpointUrl) => sendResponse({ ok: true, endpointUrl }))
+        .then((endpointState) => sendResponse({ ok: true, ...endpointState }))
         .catch((error) => {
           sendResponse({
             ok: false,
@@ -136,30 +177,49 @@ extensionApi().runtime.onMessage.addListener(
       return true
     }
 
+    if (message && message.type === 'get-active-tab-summary') {
+      queryActiveTab(api)
+        .then((tab) =>
+          sendResponse({
+            ok: true,
+            url: tab && typeof tab.url === 'string' ? tab.url : '',
+            title: tab && typeof tab.title === 'string' ? tab.title : '',
+          })
+        )
+        .catch((error) => {
+          sendResponse({
+            ok: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Failed to read active tab',
+          })
+        })
+      return true
+    }
+
     if (message && message.type === 'set-endpoint-url') {
       const endpointUrl =
         typeof message.endpointUrl === 'string'
           ? message.endpointUrl.trim()
           : ''
 
-      if (!endpointUrl) {
-        sendResponse({ ok: false, error: 'Endpoint URL is required' })
-        return false
-      }
-
+      let normalizedEndpointUrl
       try {
-        const parsed = new URL(endpointUrl)
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-          sendResponse({ ok: false, error: 'Endpoint must use HTTP or HTTPS' })
-          return false
-        }
-      } catch {
-        sendResponse({ ok: false, error: 'Endpoint URL is invalid' })
+        normalizedEndpointUrl = normalizeEndpointUrl(endpointUrl)
+      } catch (error) {
+        sendResponse({
+          ok: false,
+          error:
+            error instanceof Error ? error.message : 'Endpoint URL is invalid',
+        })
         return false
       }
 
-      setEndpointUrl(api, endpointUrl)
-        .then(() => sendResponse({ ok: true, endpointUrl }))
+      setEndpointUrl(api, normalizedEndpointUrl)
+        .then(() =>
+          sendResponse({ ok: true, endpointUrl: normalizedEndpointUrl })
+        )
         .catch((error) => {
           sendResponse({
             ok: false,

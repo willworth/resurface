@@ -51,6 +51,13 @@ async function loadEndpoint(endpointInput, statusElement) {
     const message = await sendRuntimeMessage({ type: 'get-endpoint-url' })
     if (message && message.ok && typeof message.endpointUrl === 'string') {
       endpointInput.value = message.endpointUrl
+      if (message.resetFromInvalid) {
+        setStatus(
+          statusElement,
+          'Saved endpoint was not a Resurface ingest URL; using the default endpoint.',
+          'error'
+        )
+      }
       return
     }
 
@@ -59,6 +66,24 @@ async function loadEndpoint(endpointInput, statusElement) {
     setStatus(
       statusElement,
       error instanceof Error ? error.message : 'Failed to load endpoint URL.',
+      'error'
+    )
+  }
+}
+
+async function loadActiveTab(pageUrlInput, statusElement) {
+  try {
+    const message = await sendRuntimeMessage({ type: 'get-active-tab-summary' })
+    if (message && message.ok && typeof message.url === 'string') {
+      pageUrlInput.value = message.url
+      return
+    }
+
+    setStatus(statusElement, 'Could not read active tab URL.', 'error')
+  } catch (error) {
+    setStatus(
+      statusElement,
+      error instanceof Error ? error.message : 'Failed to read active tab URL.',
       'error'
     )
   }
@@ -106,7 +131,11 @@ async function captureCurrentPage(statusElement) {
     }
 
     const detail = describeCapture(message.result)
-    setStatus(statusElement, detail, 'success')
+    const prefix =
+      message.result && message.result.resetFromInvalid
+        ? 'Saved endpoint was not a Resurface ingest URL, so the default endpoint was used. '
+        : ''
+    setStatus(statusElement, `${prefix}${detail}`, 'success')
   } catch (error) {
     setStatus(
       statusElement,
@@ -119,6 +148,7 @@ async function captureCurrentPage(statusElement) {
 document.addEventListener('DOMContentLoaded', async () => {
   const statusElement = document.getElementById('status')
   const endpointInput = document.getElementById('endpoint-input')
+  const pageUrlInput = document.getElementById('page-url-input')
   const saveButton = document.getElementById('save-endpoint-button')
   const captureButton = document.getElementById('capture-button')
 
@@ -127,6 +157,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (!(endpointInput instanceof HTMLInputElement)) {
+    return
+  }
+
+  if (!(pageUrlInput instanceof HTMLInputElement)) {
     return
   }
 
@@ -142,6 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     })
   }
 
+  await loadActiveTab(pageUrlInput, statusElement)
   await loadEndpoint(endpointInput, statusElement)
   await captureCurrentPage(statusElement)
 })

@@ -60,3 +60,8 @@ input {
   padding: 7px 8px;
   background: #ffffff;
 }
+
+input[readonly] {
+  color: #5f5143;
+  background: #efe5d7;
+}

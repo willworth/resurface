@@ -9,7 +9,8 @@ Resurface.
 - Captures URL, title, selected text, page content, meta description, and OG
   image
 - Sends to `POST /api/ingest/extension`
-- Endpoint URL is configurable and stored in extension storage
+- Ingest endpoint is configurable and stored in extension storage
+- Popup shows the current page URL separately from the ingest endpoint
 
 ## Load in Chrome
 
@@ -29,3 +30,6 @@ Resurface.
 `http://localhost:7790/api/ingest/extension`
 
 Update it from the popup if your Resurface server runs elsewhere.
+If you paste a server root such as `https://example.com:7790`, the extension
+will append `/api/ingest/extension`. Other paths are rejected so a page URL
+cannot be accidentally saved as the endpoint.
