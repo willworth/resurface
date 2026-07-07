@@ -884,6 +884,7 @@ body {
   break-inside: avoid;
   display: grid;
   gap: 0.9rem;
+  min-width: 0;
   margin: 0 0 1rem;
   padding: 1rem;
   border: 1px solid var(--card-border);
@@ -1028,9 +1029,13 @@ body {
 .library-card-body {
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
 }
 
 .library-card-image-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   border-radius: 0.8rem;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1054,6 +1059,9 @@ body {
 
 .library-image-link {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .library-card-excerpt {
