@@ -3,7 +3,7 @@
   "name": "Resurface Capture",
   "description": "Capture the current page into Resurface.",
   "version": "0.1.0",
-  "permissions": ["activeTab", "tabs", "storage"],
+  "permissions": ["activeTab", "tabs", "storage", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"

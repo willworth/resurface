@@ -89,6 +89,46 @@ function sendTabMessage(api, tabId, message) {
   })
 }
 
+function injectContentScript(api, tabId) {
+  return new Promise((resolve, reject) => {
+    if (!api.scripting || typeof api.scripting.executeScript !== 'function') {
+      reject(new Error('Content script is not available in this tab'))
+      return
+    }
+
+    api.scripting.executeScript(
+      {
+        target: { tabId },
+        files: ['content.js'],
+      },
+      () => {
+        if (api.runtime.lastError) {
+          reject(new Error(api.runtime.lastError.message))
+          return
+        }
+
+        resolve()
+      }
+    )
+  })
+}
+
+async function extractPageCapture(api, tabId) {
+  const message = { type: 'extract-page-capture' }
+
+  try {
+    return await sendTabMessage(api, tabId, message)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : ''
+    if (!detail.includes('Receiving end does not exist')) {
+      throw error
+    }
+
+    await injectContentScript(api, tabId)
+    return sendTabMessage(api, tabId, message)
+  }
+}
+
 function parseJsonSafe(text) {
   if (!text) {
     return null
@@ -107,9 +147,7 @@ async function captureActiveTab(api) {
     throw new Error('No active tab available for capture')
   }
 
-  const payload = await sendTabMessage(api, tab.id, {
-    type: 'extract-page-capture',
-  })
+  const payload = await extractPageCapture(api, tab.id)
 
   if (!payload || typeof payload !== 'object') {
     throw new Error('Could not extract page data from the current tab')
