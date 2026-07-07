@@ -27,7 +27,7 @@ Resurface.
 
 ## Default Endpoint
 
-`http://localhost:7790/api/ingest/extension`
+`https://wills-mac-mini.taild4212d.ts.net:7790/api/ingest/extension`
 
 Update it from the popup if your Resurface server runs elsewhere.
 If you paste a server root such as `https://example.com:7790`, the extension

@@ -3,7 +3,7 @@
 /* global browser, chrome */
 
 const INGEST_PATH = '/api/ingest/extension'
-const DEFAULT_ENDPOINT = `http://localhost:7790${INGEST_PATH}`
+const DEFAULT_ENDPOINT = `https://wills-mac-mini.taild4212d.ts.net:7790${INGEST_PATH}`
 
 function extensionApi() {
   if (typeof browser !== 'undefined') {
