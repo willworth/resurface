@@ -1030,6 +1030,7 @@ body {
   display: grid;
   gap: 0.55rem;
   min-width: 0;
+  overflow: hidden;
 }
 
 .library-card-image-wrap {
