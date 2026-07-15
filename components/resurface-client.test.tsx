@@ -120,6 +120,21 @@ describe('ResurfaceClient keyboard shortcuts', () => {
     })
   })
 
+  it('puts the review item before capture and search', async () => {
+    render(<ResurfaceClient />)
+
+    const item = await screen.findByText('Example item')
+    const capture = screen.getByRole('heading', { name: 'Capture' })
+    const search = screen.getByLabelText('Search saved things')
+
+    expect(
+      item.compareDocumentPosition(capture) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      item.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('drops with D', async () => {
     render(<ResurfaceClient />)
 

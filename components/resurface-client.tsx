@@ -79,11 +79,33 @@ function cleanTitle(item: ResurfaceItem): string {
   return stripped.trim()
 }
 
+function cleanInlineMarkdown(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function getDescription(item: ResurfaceItem): string | null {
   const text = item.originalText ?? ''
   if (text === item.url) return null
   if (text === item.title) return null
-  return text
+  const cleaned = cleanInlineMarkdown(text)
+  if (!cleaned || cleaned === cleanTitle(item)) return null
+  return cleaned
+}
+
+function getSummary(item: ResurfaceItem): string | null {
+  const summary = item.summary?.trim()
+  if (!summary || /^saved capture:/i.test(summary)) return null
+
+  const cleaned = cleanInlineMarkdown(summary)
+  const description = getDescription(item)
+  if (!cleaned || cleaned === description || cleaned === cleanTitle(item)) {
+    return null
+  }
+
+  return cleaned
 }
 
 function CaptureComposer({
@@ -508,50 +530,23 @@ export function ResurfaceClient() {
     () => (item ? getDescription(item) : null),
     [item]
   )
+  const summary = useMemo(() => (item ? getSummary(item) : null), [item])
 
   return (
     <main className="page-shell">
       <section className="stack home-stack">
         <header className="header home-header">
-          <div className="home-heading">
-            <h1>Resurface</h1>
-            <p className="home-subtitle">
-              Review one thing at a time, keep the good stuff, and capture new
-              things the moment they cross your mind.
-            </p>
+          <div className="home-title-row">
+            <div className="home-heading">
+              <h1>Resurface</h1>
+              <p className="home-subtitle">One saved thing at a time.</p>
+            </div>
+            <Link href="/library" className="home-library-link">
+              <span>Library</span>
+              <strong>{remaining}</strong>
+            </Link>
           </div>
         </header>
-
-        <div className="home-top-grid">
-          <Link href="/library" className="home-library-panel">
-            <span className="home-panel-kicker">Library</span>
-            <strong>{remaining} in review</strong>
-            <span>
-              Browse, search, clean up, and manage what you&apos;ve saved.
-            </span>
-          </Link>
-
-          <form className="home-search-panel" onSubmit={onSearchSubmit}>
-            <label htmlFor="home-search">Search saved things</label>
-            <div className="home-search-row">
-              <input
-                id="home-search"
-                value={homeSearch}
-                onChange={(event) => setHomeSearch(event.target.value)}
-                placeholder="Search titles, notes, URLs…"
-              />
-              <button type="submit">Search</button>
-            </div>
-          </form>
-        </div>
-
-        <div className="home-capture-row">
-          <CaptureComposer
-            inline
-            onCaptured={loadNext}
-            disabled={showingCachedData}
-          />
-        </div>
 
         {loading && !transitioning ? (
           <p className="status">Loading next item…</p>
@@ -589,7 +584,7 @@ export function ResurfaceClient() {
 
             <h2>{title}</h2>
             {description ? <p className="description">{description}</p> : null}
-            {item.summary ? <p className="summary">{item.summary}</p> : null}
+            {summary ? <p className="summary">{summary}</p> : null}
 
             {item.url ? (
               <button type="button" className="link" onClick={onOpen}>
@@ -710,6 +705,29 @@ export function ResurfaceClient() {
             </div>
           </article>
         ) : null}
+
+        <section className="home-support" aria-label="Capture and search">
+          <div className="home-capture-row">
+            <CaptureComposer
+              inline
+              onCaptured={loadNext}
+              disabled={showingCachedData}
+            />
+          </div>
+
+          <form className="home-search-panel" onSubmit={onSearchSubmit}>
+            <label htmlFor="home-search">Search saved things</label>
+            <div className="home-search-row">
+              <input
+                id="home-search"
+                value={homeSearch}
+                onChange={(event) => setHomeSearch(event.target.value)}
+                placeholder="Search titles, notes, URLs…"
+              />
+              <button type="submit">Search</button>
+            </div>
+          </form>
+        </section>
       </section>
     </main>
   )

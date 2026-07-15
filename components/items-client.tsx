@@ -169,8 +169,29 @@ function daysAgo(iso: string): string {
   return `${Math.floor(days / 365)}y`
 }
 
+function decodeHtmlEntities(value: string): string {
+  const named: Record<string, string> = {
+    amp: '&',
+    apos: "'",
+    gt: '>',
+    lt: '<',
+    nbsp: ' ',
+    quot: '"',
+  }
+
+  return value
+    .replace(/&#(x?[0-9a-f]+);/gi, (_match, code: string) => {
+      const hex = code.toLowerCase().startsWith('x')
+      const value = Number.parseInt(hex ? code.slice(1) : code, hex ? 16 : 10)
+      return Number.isFinite(value) ? String.fromCodePoint(value) : _match
+    })
+    .replace(/&([a-z]+);/gi, (match, name: string) => named[name.toLowerCase()] ?? match)
+}
+
 function cleanTitle(title: string, url: string | null): string {
-  const stripped = title.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').trim()
+  const stripped = decodeHtmlEntities(
+    title.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+  ).trim()
   if (stripped === url || isGenericTitle(stripped, url)) {
     try {
       const parsed = new URL(url ?? '')
@@ -239,15 +260,15 @@ function isGenericTitle(title: string, url: string | null): boolean {
 
 function itemExcerpt(item: ListItem): string | null {
   const previewDescription = item.previewDescription?.trim()
-  if (previewDescription) return previewDescription
+  if (previewDescription) return decodeHtmlEntities(previewDescription)
 
   const summary = item.summary?.trim()
-  if (summary) return summary
+  if (summary) return decodeHtmlEntities(summary)
 
   const text = item.originalText.trim()
   if (!text || text === item.url) return null
 
-  const cleaned = text.replace(/\s+/g, ' ').trim()
+  const cleaned = decodeHtmlEntities(text).replace(/\s+/g, ' ').trim()
   return cleaned.length > 180 ? `${cleaned.slice(0, 177)}…` : cleaned
 }
 
