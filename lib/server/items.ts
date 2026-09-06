@@ -46,8 +46,8 @@ export function getStatusCounts(): Record<string, number> {
   const row = db
     .prepare(
       `SELECT
-        COALESCE(SUM(CASE WHEN status = 'active' AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now')) THEN 1 ELSE 0 END), 0) as active,
-        COALESCE(SUM(CASE WHEN status = 'snoozed' OR (status = 'active' AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now')) THEN 1 ELSE 0 END), 0) as snoozed,
+        COALESCE(SUM(CASE WHEN status IN ('active', 'snoozed') AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now')) THEN 1 ELSE 0 END), 0) as active,
+        COALESCE(SUM(CASE WHEN status IN ('active', 'snoozed') AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now') THEN 1 ELSE 0 END), 0) as snoozed,
         COALESCE(SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END), 0) as archived,
         COALESCE(SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END), 0) as dropped
       FROM resurface_items`
@@ -99,11 +99,11 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
     where.push("status != 'dropped'")
   } else if (status === 'active') {
     where.push(
-      "status = 'active' AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))"
+      "status IN ('active', 'snoozed') AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))"
     )
   } else if (status === 'snoozed') {
     where.push(
-      "(status = 'snoozed' OR (status = 'active' AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now')))"
+      "status IN ('active', 'snoozed') AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now')"
     )
   } else {
     where.push('status = ?')

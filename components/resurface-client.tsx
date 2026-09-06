@@ -2,7 +2,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { readCachedPayload, writeCachedPayload } from '@/lib/client/read-cache'
 import { SnoozePreset } from '@/lib/server/snooze'
@@ -272,6 +272,7 @@ export function ResurfaceClient() {
     Array<{ id: string; title: string }>
   >([])
   const [undoMessage, setUndoMessage] = useState<string | null>(null)
+  const discardBusyRef = useRef(false)
 
   const loadNext = useCallback(async (excludeIds: string[] = []) => {
     setLoading(true)
@@ -379,7 +380,7 @@ export function ResurfaceClient() {
   }, [archivedTo, item, takeAction])
 
   const onDiscard = useCallback(async () => {
-    if (!item) return
+    if (!item || discardBusyRef.current) return
     if (showingCachedData) {
       setError('Writes are disabled while showing cached data.')
       return
@@ -388,6 +389,7 @@ export function ResurfaceClient() {
     const discardedItem = item
     const title = cleanTitle(discardedItem)
 
+    discardBusyRef.current = true
     setTransitioning(true)
     setError(null)
     setUndoMessage(null)
@@ -413,6 +415,7 @@ export function ResurfaceClient() {
         actionError instanceof Error ? actionError.message : 'Discard failed'
       )
     } finally {
+      discardBusyRef.current = false
       setTransitioning(false)
     }
   }, [item, loadNext, passedIds, showingCachedData])
@@ -547,12 +550,17 @@ export function ResurfaceClient() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+      const target =
+        event.target instanceof HTMLElement ? event.target : null
+      if (
+        target &&
+        (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) ||
+          target.isContentEditable ||
+          target.closest('[contenteditable="true"]'))
+      ) {
         return
       }
 
-      if (!item) return
       if (showingCachedData) return
 
       const key = event.key.toLowerCase()
@@ -562,6 +570,8 @@ export function ResurfaceClient() {
         void onUndo()
         return
       }
+
+      if (!item || transitioning) return
 
       if (key === 'a') {
         event.preventDefault()
@@ -598,6 +608,7 @@ export function ResurfaceClient() {
     onUndo,
     recentDiscards,
     showingCachedData,
+    transitioning,
   ])
 
   const savedDaysAgo = useMemo(
@@ -742,7 +753,7 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-archive"
                 onClick={onArchive}
-                disabled={showingCachedData}
+                disabled={transitioning || showingCachedData}
                 title="Archive (keep in library, stop resurfacing)"
               >
                 ✓ Archive
@@ -753,7 +764,7 @@ export function ResurfaceClient() {
                   <button
                     key={preset.value}
                     type="button"
-                    disabled={forceDecision || showingCachedData}
+                    disabled={transitioning || forceDecision || showingCachedData}
                     className="snooze-btn"
                     onClick={() => onSnooze(preset.value)}
                     title={preset.label}
@@ -767,7 +778,7 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-drop action-discard"
                 onClick={() => void onDiscard()}
-                disabled={showingCachedData}
+                disabled={transitioning || showingCachedData}
                 title="Discard (move to bin, recoverable)"
               >
                 ✕ Discard

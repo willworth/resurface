@@ -186,14 +186,16 @@ describe('Recovery, Discard, and Snooze semantics', () => {
     insertItem('item-clean-active', { status: 'active', suppressUntil: null })
     insertItem('item-expired-snooze', { status: 'active', suppressUntil: pastDate })
     insertItem('item-future-snooze', { status: 'active', suppressUntil: futureDate })
-    insertItem('item-legacy-snoozed', { status: 'snoozed', suppressUntil: null })
+    insertItem('item-legacy-snoozed-null', { status: 'snoozed', suppressUntil: null })
+    insertItem('item-legacy-snoozed-expired', { status: 'snoozed', suppressUntil: pastDate })
+    insertItem('item-legacy-snoozed-future', { status: 'snoozed', suppressUntil: futureDate })
     insertItem('item-archived-row', { status: 'archived' })
     insertItem('item-dropped-row', { status: 'dropped' })
 
     const counts = getStatusCounts()
-    // Active should be 2: clean active + expired snooze
-    expect(counts.active).toBe(2)
-    // Snoozed should be 2: future snooze + legacy snoozed
+    // Active includes expired and timestamp-less legacy snoozed rows.
+    expect(counts.active).toBe(4)
+    // Snoozed includes only rows with a future suppression timestamp.
     expect(counts.snoozed).toBe(2)
     expect(counts.archived).toBe(1)
     expect(counts.dropped).toBe(1)
@@ -203,19 +205,46 @@ describe('Recovery, Discard, and Snooze semantics', () => {
     const activeIds = activeList.items.map((i) => i.id)
     expect(activeIds).toContain('item-clean-active')
     expect(activeIds).toContain('item-expired-snooze')
+    expect(activeIds).toContain('item-legacy-snoozed-null')
+    expect(activeIds).toContain('item-legacy-snoozed-expired')
     expect(activeIds).not.toContain('item-future-snooze')
+    expect(activeIds).not.toContain('item-legacy-snoozed-future')
 
     // listItems snoozed
     const snoozedList = listItems({ status: 'snoozed' })
     const snoozedIds = snoozedList.items.map((i) => i.id)
     expect(snoozedIds).toContain('item-future-snooze')
-    expect(snoozedIds).toContain('item-legacy-snoozed')
+    expect(snoozedIds).toContain('item-legacy-snoozed-future')
+    expect(snoozedIds).not.toContain('item-legacy-snoozed-null')
+    expect(snoozedIds).not.toContain('item-legacy-snoozed-expired')
     expect(snoozedIds).not.toContain('item-clean-active')
     expect(snoozedIds).not.toContain('item-expired-snooze')
 
     // Home review candidate selection excludes future-snoozed
     const surfaced = getNextItemToSurface()
-    expect(['item-clean-active', 'item-expired-snooze']).toContain(surfaced.item?.id)
+    expect([
+      'item-clean-active',
+      'item-expired-snooze',
+      'item-legacy-snoozed-null',
+      'item-legacy-snoozed-expired',
+    ]).toContain(surfaced.item?.id)
+  })
+
+  it('does not unarchive dropped or active items', () => {
+    insertItem('dropped-target', {
+      status: 'dropped',
+      droppedAt: '2026-09-01T00:00:00.000Z',
+      preDiscardStateJson: JSON.stringify({ status: 'active' }),
+    })
+    insertItem('active-target')
+
+    const dropped = unarchiveItem('dropped-target')
+    expect(dropped?.status).toBe('dropped')
+    expect(dropped?.droppedAt).toBeTruthy()
+    expect(dropped?.preDiscardState?.status).toBe('active')
+
+    const active = unarchiveItem('active-target')
+    expect(active?.status).toBe('active')
   })
 
   it('performs additive migration safely on old-schema databases without pre_discard_state_json', () => {

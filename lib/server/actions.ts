@@ -259,6 +259,12 @@ export function unarchiveItem(id: string): ResurfaceItem | null {
     return null
   }
 
+  // Only archived items can return to review. Other states are deliberately
+  // idempotent so this endpoint cannot bypass discard/restore semantics.
+  if (existing.status !== 'archived') {
+    return existing
+  }
+
   const db = getResurfaceDatabase()
   db.prepare(
     `

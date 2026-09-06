@@ -343,6 +343,7 @@ export function ItemsClient() {
   >([])
   const [undoNotice, setUndoNotice] = useState<string | null>(null)
   const enrichingIdsRef = useRef<Set<string>>(new Set())
+  const directActionBusyRef = useRef(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -605,12 +606,15 @@ export function ItemsClient() {
 
   const discardSingle = useCallback(
     async (item: ListItem) => {
+      if (directActionBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
       }
 
       const itemTitle = cleanTitle(item.title, item.url)
+      directActionBusyRef.current = true
+      setActionBusy(true)
       setActionError(null)
 
       try {
@@ -639,6 +643,9 @@ export function ItemsClient() {
         setActionError(
           error instanceof Error ? error.message : 'Discard failed'
         )
+      } finally {
+        directActionBusyRef.current = false
+        setActionBusy(false)
       }
     },
     [showingCachedData]
@@ -646,12 +653,15 @@ export function ItemsClient() {
 
   const restoreSingle = useCallback(
     async (item: ListItem) => {
+      if (directActionBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
       }
 
       const itemTitle = cleanTitle(item.title, item.url)
+      directActionBusyRef.current = true
+      setActionBusy(true)
       setActionError(null)
 
       try {
@@ -682,6 +692,9 @@ export function ItemsClient() {
         setActionError(
           error instanceof Error ? error.message : 'Restore failed'
         )
+      } finally {
+        directActionBusyRef.current = false
+        setActionBusy(false)
       }
     },
     [showingCachedData]
@@ -689,11 +702,14 @@ export function ItemsClient() {
 
   const archiveSingle = useCallback(
     async (item: ListItem) => {
+      if (directActionBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
       }
 
+      directActionBusyRef.current = true
+      setActionBusy(true)
       setActionError(null)
       try {
         const response = await fetch(`/api/items/${item.id}/archive`, {
@@ -726,6 +742,9 @@ export function ItemsClient() {
         setActionError(
           error instanceof Error ? error.message : 'Archive failed'
         )
+      } finally {
+        directActionBusyRef.current = false
+        setActionBusy(false)
       }
     },
     [showingCachedData]
@@ -733,11 +752,14 @@ export function ItemsClient() {
 
   const unarchiveSingle = useCallback(
     async (item: ListItem) => {
+      if (directActionBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
       }
 
+      directActionBusyRef.current = true
+      setActionBusy(true)
       setActionError(null)
       try {
         const response = await fetch(`/api/items/${item.id}/unarchive`, {
@@ -766,6 +788,9 @@ export function ItemsClient() {
         setActionError(
           error instanceof Error ? error.message : 'Return to review failed'
         )
+      } finally {
+        directActionBusyRef.current = false
+        setActionBusy(false)
       }
     },
     [showingCachedData]

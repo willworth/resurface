@@ -258,8 +258,8 @@ describe('ResurfaceClient keyboard shortcuts', () => {
       expect(screen.getByText(/Discarded “Example item”/)).toBeInTheDocument()
     })
 
-    const undoBtn = screen.getByRole('button', { name: 'Undo' })
-    fireEvent.click(undoBtn)
+    // Undo must still work from the keyboard after discard leaves no current item.
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(

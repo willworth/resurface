@@ -84,7 +84,7 @@ function getCandidateRows(
       `
       SELECT *
       FROM resurface_items
-      WHERE status = 'active'
+      WHERE status IN ('active', 'snoozed')
         AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))
         ${excludeClause}
       LIMIT ?
@@ -196,7 +196,7 @@ function countActiveItems(): number {
   const row = db
     .prepare(
       `SELECT COUNT(*) as c FROM resurface_items
-       WHERE status = 'active'
+       WHERE status IN ('active', 'snoozed')
        AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))`
     )
     .get() as { c: number }
