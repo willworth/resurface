@@ -268,6 +268,10 @@ export function ResurfaceClient() {
   const [transitioning, setTransitioning] = useState(false)
   const [passedIds, setPassedIds] = useState<string[]>([])
   const [homeSearch, setHomeSearch] = useState('')
+  const [recentDiscards, setRecentDiscards] = useState<
+    Array<{ id: string; title: string }>
+  >([])
+  const [undoMessage, setUndoMessage] = useState<string | null>(null)
 
   const loadNext = useCallback(async (excludeIds: string[] = []) => {
     setLoading(true)
@@ -374,10 +378,78 @@ export function ResurfaceClient() {
     })
   }, [archivedTo, item, takeAction])
 
-  const onDrop = useCallback(() => {
+  const onDiscard = useCallback(async () => {
     if (!item) return
-    void takeAction(`/api/items/${item.id}/drop`)
-  }, [item, takeAction])
+    if (showingCachedData) {
+      setError('Writes are disabled while showing cached data.')
+      return
+    }
+
+    const discardedItem = item
+    const title = cleanTitle(discardedItem)
+
+    setTransitioning(true)
+    setError(null)
+    setUndoMessage(null)
+
+    try {
+      const response = await fetch(`/api/items/${discardedItem.id}/drop`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Discard failed')
+      }
+
+      setRecentDiscards((prev) =>
+        [{ id: discardedItem.id, title }, ...prev].slice(0, 10)
+      )
+      await loadNext(passedIds)
+    } catch (actionError) {
+      setError(
+        actionError instanceof Error ? actionError.message : 'Discard failed'
+      )
+    } finally {
+      setTransitioning(false)
+    }
+  }, [item, loadNext, passedIds, showingCachedData])
+
+  const onUndo = useCallback(async () => {
+    if (recentDiscards.length === 0) return
+    if (showingCachedData) {
+      setError('Writes are disabled while showing cached data.')
+      return
+    }
+
+    const [toRestore, ...rest] = recentDiscards
+    setRecentDiscards(rest)
+    setError(null)
+
+    try {
+      const response = await fetch(`/api/items/${toRestore.id}/restore`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Undo failed')
+      }
+
+      setUndoMessage(`Restored “${toRestore.title}” ✓`)
+      setTimeout(() => setUndoMessage(null), 3500)
+      await loadNext(passedIds)
+    } catch (undoErr) {
+      setError(
+        undoErr instanceof Error ? undoErr.message : 'Failed to restore item'
+      )
+      setRecentDiscards((prev) => [toRestore, ...prev])
+    }
+  }, [loadNext, passedIds, recentDiscards, showingCachedData])
 
   const onSnooze = useCallback(
     (preset: SnoozePreset) => {
@@ -485,12 +557,18 @@ export function ResurfaceClient() {
 
       const key = event.key.toLowerCase()
 
+      if ((event.metaKey || event.ctrlKey) && key === 'z' && recentDiscards.length > 0) {
+        event.preventDefault()
+        void onUndo()
+        return
+      }
+
       if (key === 'a') {
         event.preventDefault()
         onArchive()
       } else if (key === 'd') {
         event.preventDefault()
-        onDrop()
+        void onDiscard()
       } else if (key === 'n' || event.key === 'ArrowRight') {
         event.preventDefault()
         void onPass()
@@ -513,10 +591,12 @@ export function ResurfaceClient() {
     forceDecision,
     item,
     onArchive,
-    onDrop,
+    onDiscard,
     onOpen,
     onPass,
     onSnooze,
+    onUndo,
+    recentDiscards,
     showingCachedData,
   ])
 
@@ -547,6 +627,27 @@ export function ResurfaceClient() {
             </Link>
           </div>
         </header>
+
+        {recentDiscards.length > 0 ? (
+          <div className="undo-banner" role="status" aria-live="polite">
+            <span>
+              Discarded “{recentDiscards[0].title}”
+              {recentDiscards.length > 1 ? ` (+${recentDiscards.length - 1} more)` : ''}
+            </span>
+            <button
+              type="button"
+              className="undo-banner-btn"
+              onClick={() => void onUndo()}
+              disabled={showingCachedData}
+            >
+              Undo
+            </button>
+          </div>
+        ) : undoMessage ? (
+          <div className="undo-banner undo-banner-success" role="status" aria-live="polite">
+            <span>{undoMessage}</span>
+          </div>
+        ) : null}
 
         {loading && !transitioning ? (
           <p className="status">Loading next item…</p>
@@ -610,14 +711,14 @@ export function ResurfaceClient() {
             </button>
 
             <label className="archive-label" htmlFor="archive-category">
-              Keep in library
+              Archive in library (stop resurfacing)
             </label>
             <input
               id="archive-category"
               value={archivedTo}
               onChange={(event) => setArchivedTo(event.target.value)}
               className="archive-input"
-              placeholder="e.g. AI tools / essays / drums"
+              placeholder="Shelf or tag: e.g. AI tools / essays / drums"
               disabled={showingCachedData}
             />
 
@@ -642,8 +743,9 @@ export function ResurfaceClient() {
                 className="action-archive"
                 onClick={onArchive}
                 disabled={showingCachedData}
+                title="Archive (keep in library, stop resurfacing)"
               >
-                ✓ Keep
+                ✓ Archive
               </button>
 
               <div className="snooze-bar">
@@ -663,17 +765,18 @@ export function ResurfaceClient() {
 
               <button
                 type="button"
-                className="action-drop"
-                onClick={onDrop}
+                className="action-drop action-discard"
+                onClick={() => void onDiscard()}
                 disabled={showingCachedData}
+                title="Discard (move to bin, recoverable)"
               >
-                ✕ Drop
+                ✕ Discard
               </button>
             </div>
 
             <div className="shortcut-cheat">
               <span>
-                <kbd>A</kbd> keep
+                <kbd>A</kbd> archive
               </span>
               <span>
                 <kbd>1</kbd> 1d
@@ -697,11 +800,16 @@ export function ResurfaceClient() {
                 <kbd>→</kbd> next
               </span>
               <span>
-                <kbd>D</kbd> drop
+                <kbd>D</kbd> discard
               </span>
               <span>
                 <kbd>O</kbd> open
               </span>
+              {recentDiscards.length > 0 ? (
+                <span>
+                  <kbd>⌘Z</kbd> undo
+                </span>
+              ) : null}
             </div>
           </article>
         ) : null}

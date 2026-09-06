@@ -64,7 +64,14 @@ type SortCol =
   | 'pinned_at'
   | 'source'
   | 'random'
-type ActionKind = 'keep' | 'drop' | 'snooze'
+type ActionKind =
+  | 'archive'
+  | 'unarchive'
+  | 'discard'
+  | 'restore'
+  | 'snooze'
+  | 'keep'
+  | 'drop'
 
 function listCacheKey(params: URLSearchParams): string {
   return `resurface:read-cache:list:${params.toString()}`
@@ -290,16 +297,24 @@ function sortLabel(col: SortCol): string {
   return labels[col]
 }
 
-function canKeep(status: string): boolean {
+function canArchive(status: string): boolean {
   return status === 'active' || status === 'snoozed'
+}
+
+function canUnarchive(status: string): boolean {
+  return status === 'archived'
 }
 
 function canSnooze(status: string): boolean {
   return status === 'active' || status === 'snoozed'
 }
 
-function canDrop(status: string): boolean {
+function canDiscard(status: string): boolean {
   return status !== 'dropped'
+}
+
+function canRestore(status: string): boolean {
+  return status === 'dropped'
 }
 
 export function ItemsClient() {
@@ -323,6 +338,10 @@ export function ItemsClient() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState('')
   const [initialQueryLoaded, setInitialQueryLoaded] = useState(false)
+  const [recentDiscards, setRecentDiscards] = useState<
+    Array<{ id: string; title: string }>
+  >([])
+  const [undoNotice, setUndoNotice] = useState<string | null>(null)
   const enrichingIdsRef = useRef<Set<string>>(new Set())
 
   const load = useCallback(async () => {
@@ -550,6 +569,208 @@ export function ItemsClient() {
     [load, showingCachedData]
   )
 
+  const onUndo = useCallback(async () => {
+    if (recentDiscards.length === 0) return
+    if (showingCachedData) {
+      setActionError('Writes are disabled while showing cached data.')
+      return
+    }
+
+    const [toRestore, ...rest] = recentDiscards
+    setRecentDiscards(rest)
+    setActionError(null)
+
+    try {
+      const response = await fetch(`/api/items/${toRestore.id}/restore`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string
+        }
+        throw new Error(payload.error ?? 'Undo failed')
+      }
+
+      setUndoNotice(`Restored “${toRestore.title}” ✓`)
+      setTimeout(() => setUndoNotice(null), 3500)
+      await load()
+    } catch (undoErr) {
+      setActionError(
+        undoErr instanceof Error ? undoErr.message : 'Failed to restore item'
+      )
+      setRecentDiscards((prev) => [toRestore, ...prev])
+    }
+  }, [load, recentDiscards, showingCachedData])
+
+  const discardSingle = useCallback(
+    async (item: ListItem) => {
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
+
+      const itemTitle = cleanTitle(item.title, item.url)
+      setActionError(null)
+
+      try {
+        const response = await fetch(`/api/items/${item.id}/drop`, {
+          method: 'POST',
+        })
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Discard failed')
+        }
+
+        setRecentDiscards((prev) =>
+          [{ id: item.id, title: itemTitle }, ...prev].slice(0, 10)
+        )
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        setCounts((prev) => ({
+          ...prev,
+          [item.status]: Math.max(0, (prev[item.status] ?? 1) - 1),
+          dropped: (prev.dropped ?? 0) + 1,
+        }))
+        setTotal((t) => Math.max(0, t - 1))
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : 'Discard failed'
+        )
+      }
+    },
+    [showingCachedData]
+  )
+
+  const restoreSingle = useCallback(
+    async (item: ListItem) => {
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
+
+      const itemTitle = cleanTitle(item.title, item.url)
+      setActionError(null)
+
+      try {
+        const response = await fetch(`/api/items/${item.id}/restore`, {
+          method: 'POST',
+        })
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Restore failed')
+        }
+
+        const data = (await response.json()) as { item?: ListItem }
+        const targetStatus = data.item?.status ?? 'active'
+
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        setCounts((prev) => ({
+          ...prev,
+          dropped: Math.max(0, (prev.dropped ?? 1) - 1),
+          [targetStatus]: (prev[targetStatus] ?? 0) + 1,
+        }))
+        setTotal((t) => Math.max(0, t - 1))
+        setUndoNotice(`Restored “${itemTitle}” ✓`)
+        setTimeout(() => setUndoNotice(null), 3500)
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : 'Restore failed'
+        )
+      }
+    },
+    [showingCachedData]
+  )
+
+  const archiveSingle = useCallback(
+    async (item: ListItem) => {
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
+
+      setActionError(null)
+      try {
+        const response = await fetch(`/api/items/${item.id}/archive`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            archivedTo: item.archivedTo ?? item.suggestedArchive ?? null,
+          }),
+        })
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Archive failed')
+        }
+
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        setCounts((prev) => ({
+          ...prev,
+          [item.status]: Math.max(0, (prev[item.status] ?? 1) - 1),
+          archived: (prev.archived ?? 0) + 1,
+        }))
+        setTotal((t) => Math.max(0, t - 1))
+        setUndoNotice(
+          `Archived “${cleanTitle(item.title, item.url)}” ✓`
+        )
+        setTimeout(() => setUndoNotice(null), 3500)
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : 'Archive failed'
+        )
+      }
+    },
+    [showingCachedData]
+  )
+
+  const unarchiveSingle = useCallback(
+    async (item: ListItem) => {
+      if (showingCachedData) {
+        setActionError('Writes are disabled while showing cached data.')
+        return
+      }
+
+      setActionError(null)
+      try {
+        const response = await fetch(`/api/items/${item.id}/unarchive`, {
+          method: 'POST',
+        })
+
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string
+          }
+          throw new Error(payload.error ?? 'Return to review failed')
+        }
+
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        setCounts((prev) => ({
+          ...prev,
+          archived: Math.max(0, (prev.archived ?? 1) - 1),
+          active: (prev.active ?? 0) + 1,
+        }))
+        setTotal((t) => Math.max(0, t - 1))
+        setUndoNotice(
+          `Returned “${cleanTitle(item.title, item.url)}” to review ✓`
+        )
+        setTimeout(() => setUndoNotice(null), 3500)
+      } catch (error) {
+        setActionError(
+          error instanceof Error ? error.message : 'Return to review failed'
+        )
+      }
+    },
+    [showingCachedData]
+  )
+
   const performAction = useCallback(
     async (targetItems: ListItem[], action: ActionKind, preset?: SnoozePreset) => {
       if (targetItems.length === 0) return
@@ -563,19 +784,25 @@ export function ItemsClient() {
 
       try {
         for (const item of targetItems) {
-          if (action === 'keep' && !canKeep(item.status)) continue
+          if ((action === 'archive' || action === 'keep') && !canArchive(item.status)) continue
+          if (action === 'unarchive' && !canUnarchive(item.status)) continue
           if (action === 'snooze' && !canSnooze(item.status)) continue
-          if (action === 'drop' && !canDrop(item.status)) continue
+          if ((action === 'discard' || action === 'drop') && !canDiscard(item.status)) continue
+          if (action === 'restore' && !canRestore(item.status)) continue
 
           const endpoint =
-            action === 'keep'
+            action === 'archive' || action === 'keep'
               ? `/api/items/${item.id}/archive`
-              : action === 'drop'
-                ? `/api/items/${item.id}/drop`
-                : `/api/items/${item.id}/snooze`
+              : action === 'unarchive'
+                ? `/api/items/${item.id}/unarchive`
+                : action === 'discard' || action === 'drop'
+                  ? `/api/items/${item.id}/drop`
+                  : action === 'restore'
+                    ? `/api/items/${item.id}/restore`
+                    : `/api/items/${item.id}/snooze`
 
           const body =
-            action === 'keep'
+            action === 'archive' || action === 'keep'
               ? {
                   archivedTo: item.archivedTo ?? item.suggestedArchive ?? null,
                 }
@@ -785,14 +1012,27 @@ export function ItemsClient() {
               </div>
 
               <div className="library-batch-actions">
-                {selectedItems.some((item) => canKeep(item.status)) ? (
+                {selectedItems.some((item) => canArchive(item.status)) ? (
                   <button
                     type="button"
                     className="batch-action-btn"
-                    onClick={() => void performAction(selectedItems, 'keep')}
+                    onClick={() => void performAction(selectedItems, 'archive')}
                     disabled={actionBusy || showingCachedData}
+                    title="Archive selected items (keep in library, stop resurfacing)"
                   >
-                    Keep
+                    Archive
+                  </button>
+                ) : null}
+
+                {selectedItems.some((item) => canUnarchive(item.status)) ? (
+                  <button
+                    type="button"
+                    className="batch-action-btn"
+                    onClick={() => void performAction(selectedItems, 'unarchive')}
+                    disabled={actionBusy || showingCachedData}
+                    title="Return selected archived items to review"
+                  >
+                    Return to review
                   </button>
                 ) : null}
 
@@ -830,14 +1070,27 @@ export function ItemsClient() {
                   </div>
                 ) : null}
 
-                {selectedItems.some((item) => canDrop(item.status)) ? (
+                {selectedItems.some((item) => canDiscard(item.status)) ? (
                   <button
                     type="button"
                     className="batch-action-btn batch-danger-btn"
-                    onClick={() => void performAction(selectedItems, 'drop')}
+                    onClick={() => void performAction(selectedItems, 'discard')}
                     disabled={actionBusy || showingCachedData}
+                    title="Discard selected items to bin"
                   >
-                    Drop
+                    Discard
+                  </button>
+                ) : null}
+
+                {selectedItems.some((item) => canRestore(item.status)) ? (
+                  <button
+                    type="button"
+                    className="batch-action-btn batch-restore-btn"
+                    onClick={() => void performAction(selectedItems, 'restore')}
+                    disabled={actionBusy || showingCachedData}
+                    title="Restore selected items from bin"
+                  >
+                    Restore
                   </button>
                 ) : null}
 
@@ -862,9 +1115,10 @@ export function ItemsClient() {
               <div className="status-tabs">
                 {[
                   ['active', 'Active'],
-                  ['archived', 'Kept'],
+                  ['archived', 'Archived'],
                   ['starred', 'Starred'],
                   ['snoozed', 'Snoozed'],
+                  ['dropped', 'Bin'],
                 ].map(([s, label]) => (
                   <button
                     key={s}
@@ -881,8 +1135,7 @@ export function ItemsClient() {
               </div>
               {status === 'dropped' ? (
                 <p className="dropped-bin-note">
-                  Dropped items are hidden from normal browsing. This bin exists
-                  only for audit/recovery.
+                  Bin items are kept indefinitely for recovery. Click Restore on any card to return it to review, archive, or snooze.
                 </p>
               ) : null}
             </div>
@@ -930,6 +1183,27 @@ export function ItemsClient() {
 
         {actionError ? <p className="error">{actionError}</p> : null}
 
+        {recentDiscards.length > 0 ? (
+          <div className="undo-banner" role="status" aria-live="polite">
+            <span>
+              Discarded “{recentDiscards[0].title}”
+              {recentDiscards.length > 1 ? ` (+${recentDiscards.length - 1} more)` : ''}
+            </span>
+            <button
+              type="button"
+              className="undo-banner-btn"
+              onClick={() => void onUndo()}
+              disabled={showingCachedData}
+            >
+              Undo
+            </button>
+          </div>
+        ) : undoNotice ? (
+          <div className="undo-banner undo-banner-success" role="status" aria-live="polite">
+            <span>{undoNotice}</span>
+          </div>
+        ) : null}
+
         {loading ? (
           <p className="status">Loading…</p>
         ) : items.length === 0 ? (
@@ -955,6 +1229,52 @@ export function ItemsClient() {
                     </div>
 
                     <div className="library-card-controls">
+                      {item.status === 'dropped' ? (
+                        <button
+                          type="button"
+                          className="card-action-btn card-restore-btn"
+                          title="Restore item to previous state"
+                          onClick={() => void restoreSingle(item)}
+                          disabled={actionBusy || showingCachedData}
+                        >
+                          Restore
+                        </button>
+                      ) : (
+                        <>
+                          {item.status === 'archived' ? (
+                            <button
+                              type="button"
+                              className="card-action-btn card-unarchive-btn"
+                              title="Return this item to review queue"
+                              onClick={() => void unarchiveSingle(item)}
+                              disabled={actionBusy || showingCachedData}
+                            >
+                              Review
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="card-action-btn card-archive-btn"
+                              title="Archive (keep in library, stop resurfacing)"
+                              onClick={() => void archiveSingle(item)}
+                              disabled={actionBusy || showingCachedData}
+                            >
+                              Archive
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="card-action-btn card-discard-btn"
+                            title="Discard (move to bin, recoverable)"
+                            onClick={() => void discardSingle(item)}
+                            disabled={actionBusy || showingCachedData}
+                          >
+                            Discard
+                          </button>
+                        </>
+                      )}
+
                       {item.url ? (
                         <button
                           type="button"
@@ -1011,16 +1331,36 @@ export function ItemsClient() {
                               </button>
                             ) : null}
 
-                            {canKeep(item.status) ? (
+                            {item.status === 'dropped' ? (
                               <button
                                 type="button"
                                 className="popover-action"
-                                onClick={() =>
-                                  void performAction([item], 'keep')
-                                }
+                                onClick={() => void restoreSingle(item)}
                                 disabled={actionBusy || showingCachedData}
                               >
-                                Keep
+                                Restore
+                              </button>
+                            ) : null}
+
+                            {canArchive(item.status) ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => void archiveSingle(item)}
+                                disabled={actionBusy || showingCachedData}
+                              >
+                                Archive
+                              </button>
+                            ) : null}
+
+                            {canUnarchive(item.status) ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => void unarchiveSingle(item)}
+                                disabled={actionBusy || showingCachedData}
+                              >
+                                Return to review
                               </button>
                             ) : null}
 
@@ -1047,16 +1387,14 @@ export function ItemsClient() {
                               </div>
                             ) : null}
 
-                            {canDrop(item.status) ? (
+                            {canDiscard(item.status) ? (
                               <button
                                 type="button"
                                 className="popover-action popover-action-danger"
-                                onClick={() =>
-                                  void performAction([item], 'drop')
-                                }
+                                onClick={() => void discardSingle(item)}
                                 disabled={actionBusy || showingCachedData}
                               >
-                                Drop
+                                Discard
                               </button>
                             ) : null}
                           </div>
@@ -1115,7 +1453,7 @@ export function ItemsClient() {
                     ) : null}
 
                     {item.archivedTo ? (
-                      <p className="archived-to">Kept in {item.archivedTo}</p>
+                      <p className="archived-to">Archived in {item.archivedTo}</p>
                     ) : null}
                     {item.pinnedAt ? (
                       <p className="starred-card-note">★ Starred</p>

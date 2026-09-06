@@ -93,6 +93,7 @@ function ensureSchema(db: DatabaseSync) {
     ['library_shelf', 'TEXT'],
     ['library_priority', 'INTEGER NOT NULL DEFAULT 0'],
     ['pinned_at', 'TEXT'],
+    ['pre_discard_state_json', 'TEXT'],
   ] as const
 
   for (const [name, type] of previewColumns) {
@@ -141,6 +142,51 @@ function parseTags(raw: unknown): string[] {
   }
 }
 
+function parsePreDiscardState(
+  raw: unknown
+): ResurfaceItem['preDiscardState'] {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (parsed && typeof parsed === 'object') {
+      const validStatuses = ['active', 'snoozed', 'archived', 'dropped']
+      const rawStatus = String(parsed.status ?? 'active')
+      const status = validStatuses.includes(rawStatus)
+        ? (rawStatus as ResurfaceItem['status'])
+        : 'active'
+
+      return {
+        status,
+        suppressUntil:
+          typeof parsed.suppressUntil === 'string'
+            ? parsed.suppressUntil
+            : typeof parsed.suppress_until === 'string'
+              ? parsed.suppress_until
+              : null,
+        archivedAt:
+          typeof parsed.archivedAt === 'string'
+            ? parsed.archivedAt
+            : typeof parsed.archived_at === 'string'
+              ? parsed.archived_at
+              : null,
+        archivedTo:
+          typeof parsed.archivedTo === 'string'
+            ? parsed.archivedTo
+            : typeof parsed.archived_to === 'string'
+              ? parsed.archived_to
+              : null,
+      }
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
 export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
   return {
     id: String(row.id ?? ''),
@@ -171,5 +217,6 @@ export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
     droppedAt: (row.dropped_at as string | null) ?? null,
     fingerprint: String(row.fingerprint ?? ''),
     snoozeCount: Number(row.snooze_count ?? 0),
+    preDiscardState: parsePreDiscardState(row.pre_discard_state_json),
   }
 }

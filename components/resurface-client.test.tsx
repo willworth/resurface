@@ -217,10 +217,55 @@ describe('ResurfaceClient keyboard shortcuts', () => {
       screen.getByText(/Showing last cached item/)
     ).toHaveTextContent('Writes are disabled')
 
-    expect(screen.getByRole('button', { name: /Keep/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Drop/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Discard/ })).toBeDisabled()
 
     fireEvent.keyDown(window, { key: 'a' })
     expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows undo banner on discard and restores when clicked', async () => {
+    let nextCount = 0
+    global.fetch = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/items/next')) {
+        nextCount++
+        return {
+          ok: true,
+          json: async () => ({
+            item: nextCount === 1 ? baseItem : null,
+            forceDecision: false,
+            remaining: 9,
+          }),
+        } as Response
+      }
+      if (url === '/api/items/item-1/drop') {
+        return { ok: true, json: async () => ({ item: baseItem }) } as Response
+      }
+      if (url === '/api/items/item-1/restore') {
+        return { ok: true, json: async () => ({ item: baseItem }) } as Response
+      }
+      throw new Error(`Unexpected: ${url}`)
+    }) as typeof fetch
+
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+    const discardBtn = screen.getByRole('button', { name: /Discard/ })
+    fireEvent.click(discardBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Discarded “Example item”/)).toBeInTheDocument()
+    })
+
+    const undoBtn = screen.getByRole('button', { name: 'Undo' })
+    fireEvent.click(undoBtn)
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/items/item-1/restore',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
   })
 })

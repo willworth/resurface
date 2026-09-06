@@ -12,6 +12,13 @@ export type ResurfaceCategory =
   | 'idea'
   | 'reference'
 
+export type PreDiscardState = {
+  status: ResurfaceStatus
+  suppressUntil: string | null
+  archivedAt: string | null
+  archivedTo: string | null
+}
+
 export type ResurfaceItem = {
   id: string
   url: string | null
@@ -41,4 +48,5 @@ export type ResurfaceItem = {
   droppedAt: string | null
   fingerprint: string
   snoozeCount: number
+  preDiscardState?: PreDiscardState | null
 }

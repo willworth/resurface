@@ -152,22 +152,127 @@ export function passItem(id: string): ResurfaceItem | null {
 }
 
 export function dropItem(id: string): ResurfaceItem | null {
+  const existing = fetchItem(id)
+  if (!existing) {
+    return null
+  }
+
+  // Idempotent: if already dropped, do not overwrite pre-discard recovery state
+  if (existing.status === 'dropped') {
+    return existing
+  }
+
   const now = new Date().toISOString()
   const db = getResurfaceDatabase()
+  const preDiscardState = {
+    status: existing.status,
+    suppressUntil: existing.suppressUntil,
+    archivedAt: existing.archivedAt,
+    archivedTo: existing.archivedTo,
+  }
 
   db.prepare(
     `
     UPDATE resurface_items
     SET status = 'dropped',
         dropped_at = ?,
-        suppress_until = NULL
+        suppress_until = NULL,
+        pre_discard_state_json = ?
     WHERE id = ?
   `
-  ).run(now, id)
+  ).run(now, JSON.stringify(preDiscardState), id)
 
   const item = fetchItem(id)
   if (item) {
     logResurfaceEvent('dropped', item.id, {
+      source: item.source,
+      category: item.category,
+      previousStatus: existing.status,
+    })
+  }
+
+  return item
+}
+
+export const discardItem = dropItem
+
+export function restoreItem(id: string): ResurfaceItem | null {
+  const existing = fetchItem(id)
+  if (!existing) {
+    return null
+  }
+
+  // Idempotent: if already restored or not in bin, return existing item
+  if (existing.status !== 'dropped') {
+    return existing
+  }
+
+  const preState = existing.preDiscardState
+  // Fallback for legacy dropped items with no stored prior state: return to review (active)
+  const targetStatus: ResurfaceItem['status'] =
+    preState?.status && preState.status !== 'dropped'
+      ? preState.status
+      : 'active'
+
+  const targetSuppressUntil =
+    targetStatus === 'snoozed' || targetStatus === 'active'
+      ? (preState?.suppressUntil ?? null)
+      : null
+
+  const targetArchivedAt =
+    targetStatus === 'archived'
+      ? (preState?.archivedAt ?? new Date().toISOString())
+      : null
+
+  const targetArchivedTo =
+    targetStatus === 'archived' ? (preState?.archivedTo ?? null) : null
+
+  const db = getResurfaceDatabase()
+  db.prepare(
+    `
+    UPDATE resurface_items
+    SET status = ?,
+        dropped_at = NULL,
+        suppress_until = ?,
+        archived_at = ?,
+        archived_to = ?,
+        pre_discard_state_json = NULL
+    WHERE id = ?
+  `
+  ).run(targetStatus, targetSuppressUntil, targetArchivedAt, targetArchivedTo, id)
+
+  const restored = fetchItem(id)
+  if (restored) {
+    logResurfaceEvent('restored', restored.id, {
+      source: restored.source,
+      category: restored.category,
+      restoredStatus: targetStatus,
+    })
+  }
+
+  return restored
+}
+
+export function unarchiveItem(id: string): ResurfaceItem | null {
+  const existing = fetchItem(id)
+  if (!existing) {
+    return null
+  }
+
+  const db = getResurfaceDatabase()
+  db.prepare(
+    `
+    UPDATE resurface_items
+    SET status = 'active',
+        archived_at = NULL,
+        suppress_until = NULL
+    WHERE id = ?
+  `
+  ).run(id)
+
+  const item = fetchItem(id)
+  if (item) {
+    logResurfaceEvent('unarchived', item.id, {
       source: item.source,
       category: item.category,
     })

@@ -85,15 +85,12 @@ function getCandidateRows(
       SELECT *
       FROM resurface_items
       WHERE status = 'active'
-        AND (suppress_until IS NULL OR suppress_until <= ?)
+        AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))
         ${excludeClause}
       LIMIT ?
     `
     )
-    .all(new Date().toISOString(), ...safeExcludeIds, limit) as Record<
-    string,
-    unknown
-  >[]
+    .all(...safeExcludeIds, limit) as Record<string, unknown>[]
 }
 
 function daysSince(iso: string | null): number {
@@ -200,7 +197,7 @@ function countActiveItems(): number {
     .prepare(
       `SELECT COUNT(*) as c FROM resurface_items
        WHERE status = 'active'
-       AND (suppress_until IS NULL OR suppress_until <= datetime('now'))`
+       AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))`
     )
     .get() as { c: number }
   return row.c

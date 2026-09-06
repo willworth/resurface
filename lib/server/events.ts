@@ -8,8 +8,10 @@ export type ResurfaceEventType =
   | 'surfaced'
   | 'passed'
   | 'archived'
+  | 'unarchived'
   | 'snoozed'
   | 'dropped'
+  | 'restored'
   | 'pinned'
   | 'unpinned'
 

@@ -18,6 +18,12 @@ struct CaptureView: View {
 struct CaptureForm: View {
     @ObservedObject var vm: ResurfaceViewModel
     var embedded: Bool
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case text
+        case notes
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -30,18 +36,33 @@ struct CaptureForm: View {
             TextField("Paste a URL or type an idea…", text: $vm.captureDraft.text, axis: .vertical)
                 .lineLimit(2...5)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .text)
+                .submitLabel(.next)
 
             TextField("Notes", text: $vm.captureDraft.notes, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .notes)
+                .submitLabel(.done)
 
             HStack {
-                Button("Save") { Task { await vm.capture() } }
+                Button("Save") {
+                    focusedField = nil
+                    Task {
+                        await vm.capture()
+                        await MainActor.run {
+                            focusedField = nil
+                        }
+                    }
+                }
                     .buttonStyle(.borderedProminent)
                     .tint(ResurfaceStyle.accent)
                     .disabled(!vm.captureDraft.canSave || vm.isLoading)
 
-                Button("Clear") { vm.clearCaptureDraft() }
+                Button("Clear") {
+                    focusedField = nil
+                    vm.clearCaptureDraft()
+                }
                     .buttonStyle(.bordered)
                     .disabled(!vm.captureDraft.hasContent)
 

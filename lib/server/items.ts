@@ -43,13 +43,28 @@ export type ItemListResult = {
 
 export function getStatusCounts(): Record<string, number> {
   const db = getResurfaceDatabase()
-  const rows = db
+  const row = db
     .prepare(
-      `SELECT status, COUNT(*) as count FROM resurface_items GROUP BY status`
+      `SELECT
+        COALESCE(SUM(CASE WHEN status = 'active' AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now')) THEN 1 ELSE 0 END), 0) as active,
+        COALESCE(SUM(CASE WHEN status = 'snoozed' OR (status = 'active' AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now')) THEN 1 ELSE 0 END), 0) as snoozed,
+        COALESCE(SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END), 0) as archived,
+        COALESCE(SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END), 0) as dropped
+      FROM resurface_items`
     )
-    .all() as Array<{ status: string; count: number }>
+    .get() as {
+      active: number
+      snoozed: number
+      archived: number
+      dropped: number
+    }
 
-  return Object.fromEntries(rows.map((row) => [row.status, row.count]))
+  return {
+    active: Number(row.active ?? 0),
+    snoozed: Number(row.snoozed ?? 0),
+    archived: Number(row.archived ?? 0),
+    dropped: Number(row.dropped ?? 0),
+  }
 }
 
 export function getItemById(id: string): ResurfaceItem | null {
@@ -82,6 +97,14 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
 
   if (allOpenStatuses) {
     where.push("status != 'dropped'")
+  } else if (status === 'active') {
+    where.push(
+      "status = 'active' AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))"
+    )
+  } else if (status === 'snoozed') {
+    where.push(
+      "(status = 'snoozed' OR (status = 'active' AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now')))"
+    )
   } else {
     where.push('status = ?')
     values.push(status)
