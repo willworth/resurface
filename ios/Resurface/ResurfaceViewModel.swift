@@ -16,7 +16,6 @@ final class ResurfaceViewModel: ObservableObject {
     @Published var forceDecision = false
     @Published var remaining = 0
     @Published var libraryItems: [ResurfaceItem] = []
-    @Published var selectedItem: ResurfaceItem?
     @Published var selectedStatus: ResurfaceStatus = .active
     @Published var searchText = ""
     @Published var captureDraft = CaptureDraft() { didSet { persistCaptureDraft() } }
@@ -106,11 +105,10 @@ final class ResurfaceViewModel: ObservableObject {
 
         do {
             let destination = archivedTo?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let updated = try await client.archive(
+            _ = try await client.archive(
                 id: item.id,
                 archivedTo: destination?.isEmpty == true ? nil : destination
             )
-            selectedItem = selectedItem?.id == item.id ? updated : selectedItem
             status = "Archived"
             lastError = nil
             await refresh()
@@ -131,8 +129,7 @@ final class ResurfaceViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let updated = try await client.snooze(id: item.id, preset: preset)
-            selectedItem = selectedItem?.id == item.id ? updated : selectedItem
+            _ = try await client.snooze(id: item.id, preset: preset)
             status = "Snoozed"
             lastError = nil
             await refresh()
@@ -155,8 +152,7 @@ final class ResurfaceViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let updated = try await client.pass(id: item.id)
-            selectedItem = selectedItem?.id == item.id ? updated : selectedItem
+            _ = try await client.pass(id: item.id)
             status = "Passed"
             lastError = nil
             await refresh()
@@ -177,8 +173,7 @@ final class ResurfaceViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let updated = try await client.drop(id: item.id)
-            selectedItem = selectedItem?.id == item.id ? updated : selectedItem
+            _ = try await client.drop(id: item.id)
             status = "Dropped"
             lastError = nil
             await refresh()

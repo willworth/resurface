@@ -7,9 +7,10 @@ struct CaptureView: View {
     var body: some View {
         NavigationStack {
             List {
-                CaptureForm(vm: vm, embedded: false)
+                CaptureForm(vm: vm, embedded: embeddedInTab)
             }
             .resurfaceScreen()
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("Capture")
         }
     }
@@ -38,12 +39,14 @@ struct CaptureForm: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: .text)
                 .submitLabel(.next)
+                .onSubmit { focusedField = .notes }
 
             TextField("Notes", text: $vm.captureDraft.notes, axis: .vertical)
                 .lineLimit(1...4)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: .notes)
                 .submitLabel(.done)
+                .onSubmit { focusedField = nil }
 
             HStack {
                 Button("Save") {
@@ -76,5 +79,11 @@ struct CaptureForm: View {
             }
         }
         .padding(.vertical, 8)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focusedField = nil }
+            }
+        }
     }
 }

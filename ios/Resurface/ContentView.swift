@@ -17,13 +17,6 @@ struct ContentView: View {
         .tint(ResurfaceStyle.accent)
         .preferredColorScheme(vm.preferredColorScheme)
         .sheet(isPresented: $vm.showSettings) { SettingsView(vm: vm) }
-        .sheet(item: selectedItemBinding) { item in
-            ItemDetailView(vm: vm, item: item)
-        }
         .task { vm.start() }
-    }
-
-    private var selectedItemBinding: Binding<ResurfaceItem?> {
-        Binding(get: { vm.selectedItem }, set: { vm.selectedItem = $0 })
     }
 }
