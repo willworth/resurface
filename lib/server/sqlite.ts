@@ -48,7 +48,8 @@ function ensureSchema(db: DatabaseSync) {
       pinned_at TEXT,
       dropped_at TEXT,
       fingerprint TEXT NOT NULL,
-      snooze_count INTEGER NOT NULL DEFAULT 0
+      snooze_count INTEGER NOT NULL DEFAULT 0,
+      personal_note TEXT
     );
 
     CREATE UNIQUE INDEX IF NOT EXISTS idx_resurface_items_fingerprint
@@ -94,6 +95,7 @@ function ensureSchema(db: DatabaseSync) {
     ['library_priority', 'INTEGER NOT NULL DEFAULT 0'],
     ['pinned_at', 'TEXT'],
     ['pre_discard_state_json', 'TEXT'],
+    ['personal_note', 'TEXT'],
   ] as const
 
   for (const [name, type] of previewColumns) {
@@ -217,6 +219,7 @@ export function mapRowToItem(row: Record<string, unknown>): ResurfaceItem {
     droppedAt: (row.dropped_at as string | null) ?? null,
     fingerprint: String(row.fingerprint ?? ''),
     snoozeCount: Number(row.snooze_count ?? 0),
+    personalNote: (row.personal_note as string | null) ?? null,
     preDiscardState: parsePreDiscardState(row.pre_discard_state_json),
   }
 }

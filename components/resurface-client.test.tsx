@@ -170,6 +170,111 @@ describe('ResurfaceClient keyboard shortcuts', () => {
     })
   })
 
+  it('keeps a dirty note draft on the current item until it is saved or cancelled', async () => {
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+    fireEvent.click(screen.getByRole('button', { name: /Add a note/i }))
+
+    const textarea = screen.getByPlaceholderText(/Jot down a thought/i)
+    fireEvent.change(textarea, {
+      target: { value: 'Unsaved thought for this item' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Discard/ })).toBeDisabled()
+    const libraryLink = screen.getByRole('link', { name: /Library/ })
+    expect(libraryLink).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+    fireEvent.click(libraryLink)
+    expect(
+      screen.getByText('Save or cancel this note before moving to another item.')
+    ).toBeInTheDocument()
+
+    const fetchCountBefore = (global.fetch as ReturnType<typeof vi.fn>).mock
+      .calls.length
+    fireEvent.keyDown(window, { key: 'n' })
+    fireEvent.keyDown(window, { key: 'a' })
+    fireEvent.keyDown(window, { key: 'd' })
+    expect((global.fetch as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      fetchCountBefore
+    )
+    expect(textarea).toHaveValue('Unsaved thought for this item')
+
+    const blockedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(blockedUnload)
+    expect(blockedUnload.defaultPrevented).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Discard/ })).toBeEnabled()
+    expect(libraryLink).toHaveAttribute(
+      'aria-disabled',
+      'false'
+    )
+
+    const allowedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(allowedUnload)
+    expect(allowedUnload.defaultPrevented).toBe(false)
+  })
+
+  it('blocks item changes while a note save is in flight', async () => {
+    let resolveSave: ((response: Response) => void) | undefined
+    const saveResponse = new Promise<Response>((resolve) => {
+      resolveSave = resolve
+    })
+
+    global.fetch = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url.startsWith('/api/items/next')) {
+        return {
+          ok: true,
+          json: async () => ({
+            item: baseItem,
+            forceDecision: false,
+            remaining: 10,
+          }),
+        } as Response
+      }
+      if (url === '/api/items/item-1/note') return saveResponse
+      throw new Error(`Unexpected fetch call: ${url}`)
+    }) as typeof fetch
+
+    render(<ResurfaceClient />)
+
+    await screen.findByText('Example item')
+    fireEvent.click(screen.getByRole('button', { name: /Add a note/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Jot down a thought/i), {
+      target: { value: 'Saved after a delayed request' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /Save note/i }))
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/items/item-1/note',
+        expect.objectContaining({ method: 'POST' })
+      )
+    })
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Archive/ })).toBeDisabled()
+
+    resolveSave?.({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        item: { ...baseItem, personalNote: 'Saved after a delayed request' },
+      }),
+    } as Response)
+
+    await screen.findByText('Saved after a delayed request')
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+  })
+
   it('disables snooze buttons in force-decision mode', async () => {
     installFetch(true)
     render(<ResurfaceClient />)

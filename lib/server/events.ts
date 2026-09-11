@@ -14,6 +14,7 @@ export type ResurfaceEventType =
   | 'restored'
   | 'pinned'
   | 'unpinned'
+  | 'note_updated'
 
 export function logResurfaceEvent(
   eventType: ResurfaceEventType,

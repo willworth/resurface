@@ -286,3 +286,104 @@ export function unarchiveItem(id: string): ResurfaceItem | null {
 
   return item
 }
+
+export const NOTE_MAX_LENGTH = 10000
+
+export type UpdateNoteResult =
+  | { ok: true; item: ResurfaceItem }
+  | {
+      ok: false
+      reason: 'item-not-found' | 'conflict' | 'validation-error'
+      message: string
+      currentNote?: string | null
+    }
+
+export function updateItemNote(
+  id: string,
+  rawNote: unknown,
+  expectedCurrentNote?: string | null
+): UpdateNoteResult {
+  let normalizedNote: string | null = null
+
+  if (rawNote === null || rawNote === undefined) {
+    normalizedNote = null
+  } else if (typeof rawNote !== 'string') {
+    return {
+      ok: false,
+      reason: 'validation-error',
+      message: 'Note must be a string or null',
+    }
+  } else {
+    if (rawNote.length > NOTE_MAX_LENGTH) {
+      return {
+        ok: false,
+        reason: 'validation-error',
+        message: `Note exceeds maximum length of ${NOTE_MAX_LENGTH.toLocaleString()} characters`,
+      }
+    }
+    const trimmed = rawNote.trim()
+    normalizedNote = trimmed.length === 0 ? null : trimmed
+  }
+
+  const existing = fetchItem(id)
+  if (!existing) {
+    return {
+      ok: false,
+      reason: 'item-not-found',
+      message: 'Item not found',
+    }
+  }
+
+  const currentDbNote = existing.personalNote ?? null
+
+  // Idempotent retry: if DB already matches target note, succeed idempotently
+  if (currentDbNote === normalizedNote) {
+    return { ok: true, item: existing }
+  }
+
+  // Check expectedCurrentNote for optimistic concurrency / conflict detection
+  if (expectedCurrentNote !== undefined) {
+    const normalizedExpected =
+      expectedCurrentNote !== null &&
+      expectedCurrentNote !== undefined &&
+      expectedCurrentNote.trim().length > 0
+        ? expectedCurrentNote.trim()
+        : null
+
+    if (currentDbNote !== normalizedExpected) {
+      return {
+        ok: false,
+        reason: 'conflict',
+        message:
+          'Note was modified in another session. Please review and retry.',
+        currentNote: currentDbNote,
+      }
+    }
+  }
+
+  const db = getResurfaceDatabase()
+  db.prepare(
+    `
+    UPDATE resurface_items
+    SET personal_note = ?
+    WHERE id = ?
+  `
+  ).run(normalizedNote, id)
+
+  const updated = fetchItem(id)
+  if (updated) {
+    logResurfaceEvent('note_updated', updated.id, {
+      hasNote: Boolean(normalizedNote),
+      noteLength: normalizedNote ? normalizedNote.length : 0,
+      source: updated.source,
+      category: updated.category,
+    })
+    return { ok: true, item: updated }
+  }
+
+  return {
+    ok: false,
+    reason: 'item-not-found',
+    message: 'Item not found',
+  }
+}

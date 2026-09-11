@@ -19,6 +19,11 @@ export async function GET(req: NextRequest) {
         search: params.get('q'),
         shelf: params.get('shelf'),
         pinned: params.get('pinned') === '1',
+        hasNote:
+          params.get('has_note') === '1' ||
+          params.get('has_note') === 'true' ||
+          params.get('hasNote') === '1' ||
+          params.get('hasNote') === 'true',
         limit: Number(params.get('limit') ?? '50'),
         page: Number(params.get('page') ?? '1'),
       })

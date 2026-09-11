@@ -48,5 +48,6 @@ export type ResurfaceItem = {
   droppedAt: string | null
   fingerprint: string
   snoozeCount: number
+  personalNote?: string | null
   preDiscardState?: PreDiscardState | null
 }

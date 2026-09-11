@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { ItemsClient } from './items-client'
 
@@ -260,5 +260,68 @@ describe('ItemsClient UI actions and Bin visibility', () => {
       // Card remains visible
       expect(screen.getByText('Active Link')).toBeInTheDocument()
     })
+  })
+})
+
+
+describe('Library note draft and pagination protection', () => {
+  const originalFetch = global.fetch
+  beforeEach(() => { window.localStorage.clear() })
+  afterEach(() => { global.fetch = originalFetch; vi.clearAllMocks() })
+
+  it('keeps another card and filters locked through a dirty draft and delayed save', async () => {
+    const a = { ...mockActiveItem, personalNote: null }
+    const b = { ...mockActiveItem, id: 'second', title: 'Second card', personalNote: null }
+    let finishSave: (value: Response) => void = () => {}
+    global.fetch = vi.fn(async (input: string | URL) => {
+      if (String(input).includes('/note')) return new Promise<Response>(resolve => { finishSave = resolve })
+      return { ok: true, json: async () => ({ items: [a, b], counts: { active: 2 }, total: 2, totalPages: 1 }) } as Response
+    }) as typeof fetch
+    render(<ItemsClient />)
+    await screen.findByText('Second card')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add note' })[0])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your note' }), { target: { value: 'Do not lose this draft' } })
+    expect(screen.getAllByRole('button', { name: 'Add note' })[1]).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Has a note' })).toBeDisabled()
+    expect(screen.getByPlaceholderText('Search library…')).toBeDisabled()
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add note' })[1])
+    expect(screen.getByRole('textbox', { name: 'Your note' })).toHaveValue('Do not lose this draft')
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getAllByRole('button', { name: 'Add note' })[1]).toBeDisabled()
+    await act(async () => { finishSave({ ok: true, json: async () => ({ item: { ...a, personalNote: 'Do not lose this draft' } }) } as Response) })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Has a note' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Add note' }))
+    expect(screen.getByRole('textbox', { name: 'Your note' })).toHaveValue('')
+  })
+
+  it('returns to the previous valid page after clearing the final filtered note', async () => {
+    const first = { ...mockActiveItem, personalNote: 'Keep this note' }
+    const last = { ...mockActiveItem, id: 'last', title: 'Last-page note', personalNote: 'Clear this note' }
+    let cleared = false
+    global.fetch = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url.includes('/last/note')) {
+        cleared = true
+        return { ok: true, json: async () => ({ item: { ...last, personalNote: null } }) } as Response
+      }
+      const page = new URL(url, 'http://localhost').searchParams.get('page')
+      return { ok: true, json: async () => ({ items: page === '2' ? (cleared ? [] : [last]) : [first], total: cleared ? 50 : 51, totalPages: cleared ? 1 : 2, counts: { active: cleared ? 50 : 51 } }) } as Response
+    }) as typeof fetch
+    render(<ItemsClient />)
+    await screen.findByText('Active Link')
+    fireEvent.click(screen.getByRole('button', { name: 'Has a note' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Next →' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Next →' }))
+    await screen.findByText('Last-page note')
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit note' })[0])
+    fireEvent.change(screen.getByRole('textbox', { name: 'Your note' }), { target: { value: '' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByText('Active Link')
+    expect(screen.queryByText('No items here yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Last-page note')).not.toBeInTheDocument()
   })
 })

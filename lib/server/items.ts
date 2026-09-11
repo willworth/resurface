@@ -28,6 +28,7 @@ export type ItemListOptions = {
   search?: string | null
   shelf?: string | null
   pinned?: boolean | null
+  hasNote?: boolean | null
   limit?: number | null
   page?: number | null
 }
@@ -41,8 +42,11 @@ export type ItemListResult = {
   counts: Record<string, number>
 }
 
-export function getStatusCounts(): Record<string, number> {
+export function getStatusCounts(options?: { hasNote?: boolean }): Record<string, number> {
   const db = getResurfaceDatabase()
+  const noteCondition = options?.hasNote
+    ? " AND personal_note IS NOT NULL AND trim(personal_note) != ''"
+    : ''
   const row = db
     .prepare(
       `SELECT
@@ -50,7 +54,8 @@ export function getStatusCounts(): Record<string, number> {
         COALESCE(SUM(CASE WHEN status IN ('active', 'snoozed') AND suppress_until IS NOT NULL AND datetime(suppress_until) > datetime('now') THEN 1 ELSE 0 END), 0) as snoozed,
         COALESCE(SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END), 0) as archived,
         COALESCE(SUM(CASE WHEN status = 'dropped' THEN 1 ELSE 0 END), 0) as dropped
-      FROM resurface_items`
+      FROM resurface_items
+      WHERE 1=1${noteCondition}`
     )
     .get() as {
       active: number
@@ -125,6 +130,10 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
     values.push(like, like, like)
   }
 
+  if (options.hasNote) {
+    where.push("personal_note IS NOT NULL AND trim(personal_note) != ''")
+  }
+
   const whereClause = where.join(' AND ')
 
   const rows = db
@@ -145,6 +154,6 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
     page: safePage,
     totalPages: Math.ceil(total / safeLimit),
     pageSize: safeLimit,
-    counts: getStatusCounts(),
+    counts: getStatusCounts({ hasNote: Boolean(options.hasNote) }),
   }
 }

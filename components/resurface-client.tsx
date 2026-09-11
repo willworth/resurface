@@ -4,7 +4,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { readCachedPayload, writeCachedPayload } from '@/lib/client/read-cache'
+import {
+  invalidateReadCache,
+  readCachedPayload,
+  writeCachedPayload,
+} from '@/lib/client/read-cache'
 import { SnoozePreset } from '@/lib/server/snooze'
 import { ResurfaceItem } from '@/lib/server/types'
 
@@ -272,7 +276,41 @@ export function ResurfaceClient() {
     Array<{ id: string; title: string }>
   >([])
   const [undoMessage, setUndoMessage] = useState<string | null>(null)
+  const [draftNotes, setDraftNotes] = useState<Record<string, string>>({})
+  const [editingNote, setEditingNote] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
+  const [noteFeedback, setNoteFeedback] = useState<{
+    type: 'success' | 'error'
+    message: string
+  } | null>(null)
+  const [noteConflict, setNoteConflict] = useState<{
+    message: string
+    currentNote?: string | null
+  } | null>(null)
   const discardBusyRef = useRef(false)
+
+  const currentDraft =
+    item && draftNotes[item.id] !== undefined
+      ? draftNotes[item.id]
+      : item?.personalNote ?? ''
+
+  const hasDraft =
+    item != null &&
+    draftNotes[item.id] !== undefined &&
+    draftNotes[item.id] !== (item.personalNote ?? '')
+
+  const isEditingNote = editingNote || hasDraft
+  const noteNavigationBlocked = hasDraft || savingNote
+
+  const requireResolvedNoteDraft = useCallback(() => {
+    if (!noteNavigationBlocked) return true
+
+    setNoteFeedback({
+      type: 'error',
+      message: 'Save or cancel this note before moving to another item.',
+    })
+    return false
+  }, [noteNavigationBlocked])
 
   const loadNext = useCallback(async (excludeIds: string[] = []) => {
     setLoading(true)
@@ -300,6 +338,9 @@ export function ResurfaceClient() {
       setArchivedTo(payload.item?.suggestedArchive ?? '')
       setCacheNotice(null)
       setShowingCachedData(false)
+      setEditingNote(false)
+      setNoteConflict(null)
+      setNoteFeedback(null)
     } catch (nextError) {
       const cached = readCachedPayload<NextItemResponse>(NEXT_ITEM_CACHE_KEY)
 
@@ -313,6 +354,9 @@ export function ResurfaceClient() {
           `Showing last cached item from ${when}. Writes are disabled until Resurface reconnects.`
         )
         setShowingCachedData(true)
+        setEditingNote(false)
+        setNoteConflict(null)
+        setNoteFeedback(null)
       } else {
         setError(
           nextError instanceof Error ? nextError.message : 'Unexpected error'
@@ -321,6 +365,9 @@ export function ResurfaceClient() {
         setForceDecision(false)
         setCacheNotice(null)
         setShowingCachedData(false)
+        setEditingNote(false)
+        setNoteConflict(null)
+        setNoteFeedback(null)
       }
     } finally {
       setLoading(false)
@@ -334,6 +381,7 @@ export function ResurfaceClient() {
   const takeAction = useCallback(
     async (endpoint: string, body: Record<string, unknown> = {}) => {
       if (!item) return
+      if (!requireResolvedNoteDraft()) return
       if (showingCachedData) {
         setError('Writes are disabled while showing cached data.')
         return
@@ -369,7 +417,7 @@ export function ResurfaceClient() {
         setTransitioning(false)
       }
     },
-    [item, loadNext, passedIds, showingCachedData]
+    [item, loadNext, passedIds, requireResolvedNoteDraft, showingCachedData]
   )
 
   const onArchive = useCallback(() => {
@@ -381,6 +429,7 @@ export function ResurfaceClient() {
 
   const onDiscard = useCallback(async () => {
     if (!item || discardBusyRef.current) return
+    if (!requireResolvedNoteDraft()) return
     if (showingCachedData) {
       setError('Writes are disabled while showing cached data.')
       return
@@ -418,10 +467,11 @@ export function ResurfaceClient() {
       discardBusyRef.current = false
       setTransitioning(false)
     }
-  }, [item, loadNext, passedIds, showingCachedData])
+  }, [item, loadNext, passedIds, requireResolvedNoteDraft, showingCachedData])
 
   const onUndo = useCallback(async () => {
     if (recentDiscards.length === 0) return
+    if (!requireResolvedNoteDraft()) return
     if (showingCachedData) {
       setError('Writes are disabled while showing cached data.')
       return
@@ -452,7 +502,7 @@ export function ResurfaceClient() {
       )
       setRecentDiscards((prev) => [toRestore, ...prev])
     }
-  }, [loadNext, passedIds, recentDiscards, showingCachedData])
+  }, [loadNext, passedIds, recentDiscards, requireResolvedNoteDraft, showingCachedData])
 
   const onSnooze = useCallback(
     (preset: SnoozePreset) => {
@@ -464,6 +514,7 @@ export function ResurfaceClient() {
 
   const onPass = useCallback(async () => {
     if (!item) return
+    if (!requireResolvedNoteDraft()) return
     if (showingCachedData) {
       setError('Writes are disabled while showing cached data.')
       return
@@ -499,7 +550,7 @@ export function ResurfaceClient() {
     } finally {
       setTransitioning(false)
     }
-  }, [item, loadNext, passedIds, showingCachedData])
+  }, [item, loadNext, passedIds, requireResolvedNoteDraft, showingCachedData])
 
   const onOpen = useCallback(() => {
     if (!item?.url) return
@@ -509,12 +560,13 @@ export function ResurfaceClient() {
   const onSearchSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
+      if (!requireResolvedNoteDraft()) return
       const query = homeSearch.trim()
       const params = new URLSearchParams()
       if (query) params.set('q', query)
       window.location.assign(params.size > 0 ? `/library?${params}` : '/library')
     },
-    [homeSearch]
+    [homeSearch, requireResolvedNoteDraft]
   )
 
   const onToggleStar = useCallback(async () => {
@@ -548,6 +600,130 @@ export function ResurfaceClient() {
     }
   }, [item, showingCachedData])
 
+  const onSaveNote = useCallback(
+    async (forceOverwrite = false) => {
+      if (!item) return
+      if (showingCachedData) {
+        setNoteFeedback({
+          type: 'error',
+          message: 'Writes are disabled while showing cached data.',
+        })
+        return
+      }
+
+      const targetId = item.id
+      const expectedNote = forceOverwrite
+        ? undefined
+        : (item.personalNote ?? null)
+      const noteToSave = currentDraft
+
+      if (noteToSave.length > 10000) {
+        setNoteFeedback({
+          type: 'error',
+          message: 'Note exceeds maximum length of 10,000 characters.',
+        })
+        return
+      }
+
+      setSavingNote(true)
+      setNoteFeedback(null)
+      setNoteConflict(null)
+
+      try {
+        const response = await fetch(`/api/items/${targetId}/note`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note: noteToSave,
+            ...(expectedNote !== undefined
+              ? { expectedCurrentNote: expectedNote }
+              : {}),
+          }),
+        })
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          item?: ResurfaceItem
+          error?: string
+          currentNote?: string | null
+        }
+
+        if (response.status === 409) {
+          setNoteConflict({
+            message: payload.error ?? 'Note was modified in another session.',
+            currentNote: payload.currentNote,
+          })
+          return
+        }
+
+        if (!response.ok || !payload.item) {
+          throw new Error(payload.error ?? 'Failed to save note')
+        }
+
+        const updated = payload.item
+        setDraftNotes((prev) => {
+          const next = { ...prev }
+          delete next[targetId]
+          return next
+        })
+
+        // Freeze target check: only mutate local item state if we are still on targetId
+        setItem((prev) =>
+          prev && prev.id === targetId
+            ? { ...prev, personalNote: updated.personalNote }
+            : prev
+        )
+
+        const cached = readCachedPayload<NextItemResponse>(NEXT_ITEM_CACHE_KEY)
+        if (cached && cached.payload.item?.id === targetId) {
+          writeCachedPayload(NEXT_ITEM_CACHE_KEY, {
+            ...cached.payload,
+            item: {
+              ...cached.payload.item,
+              personalNote: updated.personalNote,
+            },
+          })
+        }
+
+        invalidateReadCache('resurface:read-cache:list')
+        setEditingNote(false)
+        setNoteFeedback({ type: 'success', message: 'Saved ✓' })
+        setTimeout(() => setNoteFeedback(null), 2500)
+      } catch (err) {
+        setNoteFeedback({
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Failed to save note',
+        })
+      } finally {
+        setSavingNote(false)
+      }
+    },
+    [currentDraft, item, showingCachedData]
+  )
+
+  const onCancelNote = useCallback(() => {
+    if (!item) return
+    setDraftNotes((prev) => {
+      const next = { ...prev }
+      delete next[item.id]
+      return next
+    })
+    setEditingNote(false)
+    setNoteConflict(null)
+    setNoteFeedback(null)
+  }, [item])
+
+  useEffect(() => {
+    if (!noteNavigationBlocked) return
+
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [noteNavigationBlocked])
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target =
@@ -562,6 +738,8 @@ export function ResurfaceClient() {
       }
 
       if (showingCachedData) return
+
+      if (noteNavigationBlocked) return
 
       const key = event.key.toLowerCase()
 
@@ -607,6 +785,7 @@ export function ResurfaceClient() {
     onSnooze,
     onUndo,
     recentDiscards,
+    noteNavigationBlocked,
     showingCachedData,
     transitioning,
   ])
@@ -632,7 +811,14 @@ export function ResurfaceClient() {
               <h1>Resurface</h1>
               <p className="home-subtitle">One saved thing at a time.</p>
             </div>
-            <Link href="/library" className="home-library-link">
+            <Link
+              href="/library"
+              className="home-library-link"
+              aria-disabled={noteNavigationBlocked}
+              onClick={(event) => {
+                if (!requireResolvedNoteDraft()) event.preventDefault()
+              }}
+            >
               <span>Library</span>
               <strong>{remaining}</strong>
             </Link>
@@ -649,7 +835,7 @@ export function ResurfaceClient() {
               type="button"
               className="undo-banner-btn"
               onClick={() => void onUndo()}
-              disabled={showingCachedData}
+              disabled={showingCachedData || noteNavigationBlocked}
             >
               Undo
             </button>
@@ -721,6 +907,137 @@ export function ResurfaceClient() {
               {item.pinnedAt ? '★ Starred' : '☆ Star'}
             </button>
 
+            <div className="personal-note-section">
+              {!isEditingNote ? (
+                item.personalNote ? (
+                  <div className="personal-note-display">
+                    <div className="personal-note-display-head">
+                      <span className="personal-note-title">Your note</span>
+                      <button
+                        type="button"
+                        className="personal-note-edit-btn"
+                        onClick={() => {
+                          setEditingNote(true)
+                          setNoteFeedback(null)
+                        }}
+                        disabled={showingCachedData}
+                        aria-label="Edit your note"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                    <p className="personal-note-body">{item.personalNote}</p>
+                  </div>
+                ) : (
+                  <div className="personal-note-prompt">
+                    <button
+                      type="button"
+                      className="personal-note-add-btn"
+                      onClick={() => {
+                        setEditingNote(true)
+                        setNoteFeedback(null)
+                      }}
+                      disabled={showingCachedData}
+                      aria-label="Add a note"
+                    >
+                      + Add a note
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="personal-note-editor">
+                  <div className="personal-note-editor-head">
+                    <label
+                      htmlFor={`review-note-${item.id}`}
+                      className="personal-note-label"
+                    >
+                      Your note
+                    </label>
+                    <span className="personal-note-counter">
+                      {currentDraft.length}/10,000
+                    </span>
+                  </div>
+                  <textarea
+                    id={`review-note-${item.id}`}
+                    className="personal-note-textarea"
+                    value={currentDraft}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setDraftNotes((prev) => ({ ...prev, [item.id]: val }))
+                      setNoteFeedback(null)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        void onSaveNote()
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault()
+                        onCancelNote()
+                      }
+                    }}
+                    placeholder="Jot down a thought on this item…"
+                    rows={3}
+                    maxLength={10000}
+                    disabled={savingNote || showingCachedData}
+                    autoFocus
+                  />
+                  <div className="personal-note-actions">
+                    <span className="personal-note-hint">
+                      ⌘↵ to save · Esc to cancel
+                    </span>
+                    <div className="personal-note-buttons">
+                      <button
+                        type="button"
+                        className="personal-note-cancel-btn"
+                        onClick={onCancelNote}
+                        disabled={savingNote}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="personal-note-save-btn"
+                        onClick={() => void onSaveNote()}
+                        disabled={savingNote || showingCachedData}
+                      >
+                        {savingNote ? 'Saving…' : 'Save note'}
+                      </button>
+                    </div>
+                  </div>
+                  {noteConflict ? (
+                    <div className="personal-note-conflict-panel" role="alert">
+                      <p className="conflict-msg">{noteConflict.message}</p>
+                      {noteConflict.currentNote ? (
+                        <p className="conflict-server-text">
+                          Server version: “{noteConflict.currentNote}”
+                        </p>
+                      ) : (
+                        <p className="conflict-server-text">
+                          Note was cleared in another window.
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        className="conflict-force-btn"
+                        onClick={() => void onSaveNote(true)}
+                        disabled={savingNote}
+                      >
+                        Overwrite with my draft
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {noteFeedback ? (
+                <div
+                  className={`personal-note-feedback feedback-${noteFeedback.type}`}
+                  role="status"
+                >
+                  {noteFeedback.message}
+                </div>
+              ) : null}
+            </div>
+
             <label className="archive-label" htmlFor="archive-category">
               Archive in library (stop resurfacing)
             </label>
@@ -744,7 +1061,7 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-pass"
                 onClick={() => void onPass()}
-                disabled={showingCachedData}
+                disabled={showingCachedData || noteNavigationBlocked}
               >
                 Next
               </button>
@@ -753,7 +1070,9 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-archive"
                 onClick={onArchive}
-                disabled={transitioning || showingCachedData}
+                disabled={
+                  transitioning || showingCachedData || noteNavigationBlocked
+                }
                 title="Archive (keep in library, stop resurfacing)"
               >
                 ✓ Archive
@@ -764,7 +1083,12 @@ export function ResurfaceClient() {
                   <button
                     key={preset.value}
                     type="button"
-                    disabled={transitioning || forceDecision || showingCachedData}
+                    disabled={
+                      transitioning ||
+                      forceDecision ||
+                      showingCachedData ||
+                      noteNavigationBlocked
+                    }
                     className="snooze-btn"
                     onClick={() => onSnooze(preset.value)}
                     title={preset.label}
@@ -778,7 +1102,9 @@ export function ResurfaceClient() {
                 type="button"
                 className="action-drop action-discard"
                 onClick={() => void onDiscard()}
-                disabled={transitioning || showingCachedData}
+                disabled={
+                  transitioning || showingCachedData || noteNavigationBlocked
+                }
                 title="Discard (move to bin, recoverable)"
               >
                 ✕ Discard
@@ -829,7 +1155,9 @@ export function ResurfaceClient() {
           <div className="home-capture-row">
             <CaptureComposer
               inline
-              onCaptured={loadNext}
+              onCaptured={() => {
+                if (requireResolvedNoteDraft()) void loadNext()
+              }}
               disabled={showingCachedData}
             />
           </div>

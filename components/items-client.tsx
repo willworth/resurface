@@ -4,7 +4,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { readCachedPayload, writeCachedPayload } from '@/lib/client/read-cache'
+import {
+  clearCachedPayload,
+  invalidateReadCache,
+  readCachedPayload,
+  writeCachedPayload,
+} from '@/lib/client/read-cache'
+import type { ResurfaceItem } from '@/lib/server/types'
 
 type SnoozePreset =
   | 'tomorrow'
@@ -31,6 +37,7 @@ type ListItem = {
   previewImageUrl: string | null
   previewFetchedAt: string | null
   originalText: string
+  personalNote?: string | null
   category: string
   source: string
   status: string
@@ -160,6 +167,27 @@ function CogIcon() {
         fill="none"
         stroke="currentColor"
         strokeWidth="1.35"
+      />
+    </svg>
+  )
+}
+
+function NoteIcon({ hasNote }: { hasNote: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
+      <path
+        d="M4.5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5H8L4.5 18v-12A1.5 1.5 0 0 1 4.5 4.5Z"
+        fill={hasNote ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.35"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M7.5 8h5M7.5 11h3"
+        fill="none"
+        stroke={hasNote ? '#101922' : 'currentColor'}
+        strokeWidth="1.3"
+        strokeLinecap="round"
       />
     </svg>
   )
@@ -337,6 +365,24 @@ export function ItemsClient() {
   const [actionBusy, setActionBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState('')
+  const [hasNote, setHasNote] = useState(false)
+  const [editingNoteItemId, setEditingNoteItemId] = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+  const [noteSaveBusy, setNoteSaveBusy] = useState(false)
+  const [editingNoteOriginal, setEditingNoteOriginal] = useState('')
+  const noteSaveBusyRef = useRef(false)
+  const noteNavigationBlocked = noteSaveBusy || (editingNoteItemId !== null && editingNoteText !== editingNoteOriginal)
+  const noteNavigationBlockedRef = useRef(false)
+  noteNavigationBlockedRef.current = noteNavigationBlocked
+  const [noteCardError, setNoteCardError] = useState<{
+    id: string
+    message: string
+  } | null>(null)
+  const [noteConflict, setNoteConflict] = useState<{
+    id: string
+    message: string
+    currentNote?: string | null
+  } | null>(null)
   const [initialQueryLoaded, setInitialQueryLoaded] = useState(false)
   const [recentDiscards, setRecentDiscards] = useState<
     Array<{ id: string; title: string }>
@@ -356,6 +402,7 @@ export function ItemsClient() {
       page: String(page),
       ...(search ? { q: search } : {}),
       ...(status === 'starred' ? { pinned: '1' } : {}),
+      ...(hasNote ? { has_note: '1' } : {}),
     })
     const cacheKey = listCacheKey(params)
 
@@ -370,6 +417,11 @@ export function ItemsClient() {
 
       const data = (await res.json()) as ListResponse
       writeCachedPayload(cacheKey, data)
+      const lastPage = Math.max(1, data.totalPages)
+      if (page > lastPage) {
+        setPage(lastPage)
+        return
+      }
       setItems(data.items)
       setCounts(data.counts)
       setTotalPages(data.totalPages)
@@ -399,17 +451,138 @@ export function ItemsClient() {
     } finally {
       setLoading(false)
     }
-  }, [status, sort, dir, search, page])
+  }, [status, sort, dir, search, page, hasNote])
+
+  const startEditingNote = useCallback((item: ListItem) => {
+    if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
+    setEditingNoteOriginal(item.personalNote ?? '')
+    setEditingNoteItemId(item.id)
+    setEditingNoteText(item.personalNote ?? '')
+    setNoteCardError(null)
+    setNoteConflict(null)
+  }, [])
+
+  const cancelEditingNote = useCallback(() => {
+    if (noteSaveBusyRef.current) return
+    setEditingNoteItemId(null)
+    setEditingNoteText('')
+    setNoteCardError(null)
+    setNoteConflict(null)
+  }, [])
+
+  const saveCardNote = useCallback(
+    async (item: ListItem, forceOverwrite = false) => {
+      if (noteSaveBusyRef.current || editingNoteItemId !== item.id) return
+      if (showingCachedData) {
+        setNoteCardError({
+          id: item.id,
+          message: 'Writes are disabled while showing cached data.',
+        })
+        return
+      }
+
+      const noteToSave = editingNoteText
+      if (noteToSave.length > 10000) {
+        setNoteCardError({
+          id: item.id,
+          message: 'Note exceeds maximum length of 10,000 characters.',
+        })
+        return
+      }
+
+      noteSaveBusyRef.current = true
+      setNoteSaveBusy(true)
+      setNoteCardError(null)
+      setNoteConflict(null)
+
+      try {
+        const expectedNote = forceOverwrite
+          ? undefined
+          : (item.personalNote ?? null)
+
+        const response = await fetch(`/api/items/${item.id}/note`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            note: noteToSave,
+            ...(expectedNote !== undefined
+              ? { expectedCurrentNote: expectedNote }
+              : {}),
+          }),
+        })
+
+        const payload = (await response.json().catch(() => ({}))) as {
+          item?: ResurfaceItem
+          error?: string
+          currentNote?: string | null
+        }
+
+        if (response.status === 409) {
+          setNoteConflict({
+            id: item.id,
+            message: payload.error ?? 'Note was modified in another session.',
+            currentNote: payload.currentNote,
+          })
+          return
+        }
+
+        if (!response.ok || !payload.item) {
+          throw new Error(payload.error ?? 'Failed to save note')
+        }
+
+        const updatedNote = payload.item.personalNote
+
+        // Invalidate list caches and review cache
+        invalidateReadCache('resurface:read-cache:list')
+        clearCachedPayload('resurface:read-cache:next-item')
+
+        // If currently filtering by hasNote and note was cleared, refresh list to update count/pagination
+        if (hasNote && (!updatedNote || updatedNote.trim().length === 0)) {
+          setEditingNoteItemId(null)
+          setEditingNoteText('')
+          await load()
+        } else {
+          setItems((prev) =>
+            prev.map((entry) =>
+              entry.id === item.id
+                ? { ...entry, personalNote: updatedNote }
+                : entry
+            )
+          )
+          setEditingNoteItemId(null)
+          setEditingNoteText('')
+        }
+      } catch (err) {
+        setNoteCardError({
+          id: item.id,
+          message: err instanceof Error ? err.message : 'Failed to save note',
+        })
+      } finally {
+        noteSaveBusyRef.current = false
+        setNoteSaveBusy(false)
+      }
+    },
+    [editingNoteText, editingNoteItemId, hasNote, load, showingCachedData]
+  )
 
   useEffect(() => {
     if (initialQueryLoaded) return
     const params = new URLSearchParams(window.location.search)
     const query = params.get('q') ?? ''
     const nextStatus = params.get('status')
+    const hasNoteParam =
+      params.get('has_note') === '1' ||
+      params.get('has_note') === 'true' ||
+      params.get('hasNote') === '1' ||
+      params.get('hasNote') === 'true'
 
     if (query) {
       setSearchInput(query)
       setSearch(query)
+    }
+
+    if (hasNoteParam) {
+      setHasNote(true)
     }
 
     if (
@@ -429,7 +602,8 @@ export function ItemsClient() {
     setSelectedIds([])
     setMenuItemId(null)
     setBatchSnoozeOpen(false)
-  }, [status, search])
+    setEditingNoteItemId(null)
+  }, [status, search, hasNote])
 
   useEffect(() => {
     if (!initialQueryLoaded) return
@@ -437,10 +611,10 @@ export function ItemsClient() {
   }, [initialQueryLoaded, load])
 
   useEffect(() => {
-    if (!initialQueryLoaded) return
+    if (!initialQueryLoaded || noteNavigationBlocked) return
     const t = setTimeout(() => setSearch(searchInput), 300)
     return () => clearTimeout(t)
-  }, [initialQueryLoaded, searchInput])
+  }, [initialQueryLoaded, searchInput, noteNavigationBlocked])
 
   useEffect(() => {
     setSelectedIds((current) =>
@@ -514,6 +688,16 @@ export function ItemsClient() {
     }
   }, [items])
 
+  useEffect(() => {
+    if (!noteNavigationBlocked) return
+    const guard = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', guard)
+    return () => window.removeEventListener('beforeunload', guard)
+  }, [noteNavigationBlocked])
+
   const selectedItems = useMemo(
     () => items.filter((item) => selectedIds.includes(item.id)),
     [items, selectedIds]
@@ -536,6 +720,7 @@ export function ItemsClient() {
 
   const toggleStar = useCallback(
     async (item: ListItem) => {
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -571,6 +756,7 @@ export function ItemsClient() {
   )
 
   const onUndo = useCallback(async () => {
+    if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
     if (recentDiscards.length === 0) return
     if (showingCachedData) {
       setActionError('Writes are disabled while showing cached data.')
@@ -607,6 +793,7 @@ export function ItemsClient() {
   const discardSingle = useCallback(
     async (item: ListItem) => {
       if (directActionBusyRef.current) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -654,6 +841,7 @@ export function ItemsClient() {
   const restoreSingle = useCallback(
     async (item: ListItem) => {
       if (directActionBusyRef.current) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -703,6 +891,7 @@ export function ItemsClient() {
   const archiveSingle = useCallback(
     async (item: ListItem) => {
       if (directActionBusyRef.current) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -753,6 +942,7 @@ export function ItemsClient() {
   const unarchiveSingle = useCallback(
     async (item: ListItem) => {
       if (directActionBusyRef.current) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -799,6 +989,7 @@ export function ItemsClient() {
   const performAction = useCallback(
     async (targetItems: ListItem[], action: ActionKind, preset?: SnoozePreset) => {
       if (targetItems.length === 0) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -865,6 +1056,7 @@ export function ItemsClient() {
   const reEnrichItems = useCallback(
     async (targetItems: ListItem[]) => {
       if (targetItems.length === 0) return
+      if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) return
       if (showingCachedData) {
         setActionError('Writes are disabled while showing cached data.')
         return
@@ -937,7 +1129,7 @@ export function ItemsClient() {
       <section className="items-container">
         <header className="items-header">
           <div className="items-title-row">
-            <Link href="/" className="items-back">
+            <Link href="/" className="items-back" aria-disabled={noteNavigationBlocked} onClick={(event) => { if (noteNavigationBlockedRef.current || noteSaveBusyRef.current) event.preventDefault() }}>
               ←
             </Link>
             <div className="items-heading-block">
@@ -1004,6 +1196,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => {
+                      if (noteNavigationBlockedRef.current) return
                       setStatus('dropped')
                       setUtilitiesOpen(false)
                     }}
@@ -1042,7 +1235,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => void performAction(selectedItems, 'archive')}
-                    disabled={actionBusy || showingCachedData}
+                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                     title="Archive selected items (keep in library, stop resurfacing)"
                   >
                     Archive
@@ -1054,7 +1247,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn"
                     onClick={() => void performAction(selectedItems, 'unarchive')}
-                    disabled={actionBusy || showingCachedData}
+                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                     title="Return selected archived items to review"
                   >
                     Return to review
@@ -1067,7 +1260,7 @@ export function ItemsClient() {
                       type="button"
                       className="batch-action-btn"
                       onClick={() => setBatchSnoozeOpen((current) => !current)}
-                      disabled={actionBusy || showingCachedData}
+                      disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                     >
                       Snooze
                     </button>
@@ -1085,7 +1278,7 @@ export function ItemsClient() {
                                 option.value
                               )
                             }
-                            disabled={actionBusy || showingCachedData}
+                            disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                           >
                             {option.label}
                           </button>
@@ -1100,7 +1293,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn batch-danger-btn"
                     onClick={() => void performAction(selectedItems, 'discard')}
-                    disabled={actionBusy || showingCachedData}
+                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                     title="Discard selected items to bin"
                   >
                     Discard
@@ -1112,7 +1305,7 @@ export function ItemsClient() {
                     type="button"
                     className="batch-action-btn batch-restore-btn"
                     onClick={() => void performAction(selectedItems, 'restore')}
-                    disabled={actionBusy || showingCachedData}
+                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                     title="Restore selected items from bin"
                   >
                     Restore
@@ -1149,6 +1342,7 @@ export function ItemsClient() {
                     key={s}
                     type="button"
                     className={`tab ${status === s ? 'tab-active' : ''}`}
+                    disabled={noteNavigationBlocked}
                     onClick={() => setStatus(s)}
                   >
                     {label}{' '}
@@ -1166,6 +1360,22 @@ export function ItemsClient() {
             </div>
 
             <div className="items-control-group">
+              <span className="control-label">Filter</span>
+              <div className="status-tabs">
+                <button
+                  type="button"
+                  className={`tab ${hasNote ? 'tab-active' : ''}`}
+                  disabled={noteNavigationBlocked}
+                  onClick={() => setHasNote((prev) => !prev)}
+                  aria-pressed={hasNote}
+                  title="Filter to items with a personal note"
+                >
+                  Has a note
+                </button>
+              </div>
+            </div>
+
+            <div className="items-control-group">
               <span className="control-label">Order</span>
               <div className="status-tabs">
                 {sortOptions.map((option) => (
@@ -1173,6 +1383,7 @@ export function ItemsClient() {
                     key={option}
                     type="button"
                     className={`tab ${sort === option ? 'tab-active' : ''}`}
+                    disabled={noteNavigationBlocked}
                     onClick={() => {
                       if (sort === option && option !== 'random') {
                         setDir((current) =>
@@ -1198,11 +1409,14 @@ export function ItemsClient() {
             <input
               className="items-search"
               placeholder="Search library…"
+              disabled={noteNavigationBlocked}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
             />
           </div>
         </header>
+
+        {noteNavigationBlocked ? <p role="status" className="cache-warning">{noteSaveBusy ? 'Saving your note…' : 'Save or cancel your note before changing items or leaving Library.'}</p> : null}
 
         {cacheNotice ? <p className="cache-warning">{cacheNotice}</p> : null}
 
@@ -1218,7 +1432,7 @@ export function ItemsClient() {
               type="button"
               className="undo-banner-btn"
               onClick={() => void onUndo()}
-              disabled={showingCachedData}
+              disabled={showingCachedData || noteNavigationBlocked}
             >
               Undo
             </button>
@@ -1260,7 +1474,7 @@ export function ItemsClient() {
                           className="card-action-btn card-restore-btn"
                           title="Restore item to previous state"
                           onClick={() => void restoreSingle(item)}
-                          disabled={actionBusy || showingCachedData}
+                          disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                         >
                           Restore
                         </button>
@@ -1272,7 +1486,7 @@ export function ItemsClient() {
                               className="card-action-btn card-unarchive-btn"
                               title="Return this item to review queue"
                               onClick={() => void unarchiveSingle(item)}
-                              disabled={actionBusy || showingCachedData}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                             >
                               Review
                             </button>
@@ -1282,7 +1496,7 @@ export function ItemsClient() {
                               className="card-action-btn card-archive-btn"
                               title="Archive (keep in library, stop resurfacing)"
                               onClick={() => void archiveSingle(item)}
-                              disabled={actionBusy || showingCachedData}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                             >
                               Archive
                             </button>
@@ -1293,7 +1507,7 @@ export function ItemsClient() {
                             className="card-action-btn card-discard-btn"
                             title="Discard (move to bin, recoverable)"
                             onClick={() => void discardSingle(item)}
-                            disabled={actionBusy || showingCachedData}
+                            disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                           >
                             Discard
                           </button>
@@ -1316,9 +1530,20 @@ export function ItemsClient() {
                         className={`card-icon-btn star-card-btn${item.pinnedAt ? ' card-icon-btn-active star-card-btn-active' : ''}`}
                         title={item.pinnedAt ? 'Remove star' : 'Star this'}
                         onClick={() => void toggleStar(item)}
-                        disabled={actionBusy || showingCachedData}
+                        disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                       >
                         <StarIcon filled={Boolean(item.pinnedAt)} />
+                      </button>
+
+                      <button
+                        type="button"
+                        className={`card-icon-btn note-card-btn${item.personalNote ? ' card-icon-btn-active note-card-btn-active' : ''}`}
+                        title={item.personalNote ? 'Edit note' : 'Add note'}
+                        onClick={() => startEditingNote(item)}
+                        disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                        aria-label={item.personalNote ? 'Edit note' : 'Add note'}
+                      >
+                        <NoteIcon hasNote={Boolean(item.personalNote)} />
                       </button>
 
                       <button
@@ -1346,6 +1571,18 @@ export function ItemsClient() {
 
                         {menuItemId === item.id ? (
                           <div className="action-popover action-popover-card">
+                            <button
+                              type="button"
+                              className="popover-action"
+                              onClick={() => {
+                                setMenuItemId(null)
+                                startEditingNote(item)
+                              }}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                            >
+                              {item.personalNote ? 'Edit note' : 'Add note'}
+                            </button>
+
                             {item.url ? (
                               <button
                                 type="button"
@@ -1361,7 +1598,7 @@ export function ItemsClient() {
                                 type="button"
                                 className="popover-action"
                                 onClick={() => void restoreSingle(item)}
-                                disabled={actionBusy || showingCachedData}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                               >
                                 Restore
                               </button>
@@ -1372,7 +1609,7 @@ export function ItemsClient() {
                                 type="button"
                                 className="popover-action"
                                 onClick={() => void archiveSingle(item)}
-                                disabled={actionBusy || showingCachedData}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                               >
                                 Archive
                               </button>
@@ -1383,7 +1620,7 @@ export function ItemsClient() {
                                 type="button"
                                 className="popover-action"
                                 onClick={() => void unarchiveSingle(item)}
-                                disabled={actionBusy || showingCachedData}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                               >
                                 Return to review
                               </button>
@@ -1404,7 +1641,7 @@ export function ItemsClient() {
                                         option.value
                                       )
                                     }
-                                    disabled={actionBusy || showingCachedData}
+                                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                                   >
                                     {option.label}
                                   </button>
@@ -1417,7 +1654,7 @@ export function ItemsClient() {
                                 type="button"
                                 className="popover-action popover-action-danger"
                                 onClick={() => void discardSingle(item)}
-                                disabled={actionBusy || showingCachedData}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                               >
                                 Discard
                               </button>
@@ -1483,6 +1720,123 @@ export function ItemsClient() {
                     {item.pinnedAt ? (
                       <p className="starred-card-note">★ Starred</p>
                     ) : null}
+
+                    {editingNoteItemId === item.id ? (
+                      <div
+                        className="library-card-note-editor"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="library-card-note-editor-head">
+                          <label
+                            htmlFor={`card-note-${item.id}`}
+                            className="library-card-note-label"
+                          >
+                            Your note
+                          </label>
+                          <span className="library-card-note-chars">
+                            {editingNoteText.length}/10,000
+                          </span>
+                        </div>
+                        <textarea
+                          id={`card-note-${item.id}`}
+                          className="library-card-note-textarea"
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault()
+                              void saveCardNote(item)
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              cancelEditingNote()
+                            }
+                          }}
+                          rows={3}
+                          maxLength={10000}
+                          placeholder="Jot down a thought…"
+                          disabled={noteSaveBusy || showingCachedData}
+                          autoFocus
+                        />
+                        <div className="library-card-note-actions">
+                          <span className="library-card-note-hint">
+                            ⌘↵ to save · Esc to cancel
+                          </span>
+                          <div className="library-card-note-buttons">
+                            <button
+                              type="button"
+                              className="library-card-note-cancel"
+                              onClick={cancelEditingNote}
+                              disabled={noteSaveBusy}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="library-card-note-save"
+                              onClick={() => void saveCardNote(item)}
+                              disabled={noteSaveBusy || showingCachedData}
+                            >
+                              {noteSaveBusy ? 'Saving…' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                        {noteConflict?.id === item.id ? (
+                          <div
+                            className="library-card-note-conflict"
+                            role="alert"
+                          >
+                            <p className="conflict-msg">
+                              {noteConflict.message}
+                            </p>
+                            {noteConflict.currentNote ? (
+                              <p className="conflict-server-text">
+                                Server version: “{noteConflict.currentNote}”
+                              </p>
+                            ) : (
+                              <p className="conflict-server-text">
+                                Note was cleared in another window.
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              className="conflict-force-btn"
+                              onClick={() => void saveCardNote(item, true)}
+                              disabled={noteSaveBusy}
+                            >
+                              Overwrite with my draft
+                            </button>
+                          </div>
+                        ) : null}
+                        {noteCardError?.id === item.id ? (
+                          <p className="library-card-note-error">
+                            {noteCardError.message}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : item.personalNote ? (
+                      <div className="library-card-note-block">
+                        <div className="library-card-note-head">
+                          <span className="library-card-note-badge">
+                            Your note
+                          </span>
+                          <button
+                            type="button"
+                            className="library-card-note-edit-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              startEditingNote(item)
+                            }}
+                            disabled={showingCachedData || noteNavigationBlocked}
+                            aria-label="Edit note"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        <p className="library-card-note-text">
+                          {item.personalNote}
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="library-card-footer">
@@ -1511,7 +1865,7 @@ export function ItemsClient() {
               <button
                 type="button"
                 className="page-btn"
-                disabled={page <= 1}
+                disabled={page <= 1 || noteNavigationBlocked}
                 onClick={() => setPage((p) => p - 1)}
               >
                 ← Prev
@@ -1519,7 +1873,7 @@ export function ItemsClient() {
               <button
                 type="button"
                 className="page-btn"
-                disabled={page >= totalPages}
+                disabled={page >= totalPages || noteNavigationBlocked}
                 onClick={() => setPage((p) => p + 1)}
               >
                 Next →
