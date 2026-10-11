@@ -9,6 +9,7 @@ const DEFAULT_WEIGHTS = {
   freshness: Number(process.env.RESURFACE_WEIGHT_FRESHNESS ?? '1'),
   resurfacingGap: Number(process.env.RESURFACE_WEIGHT_RESURFACING_GAP ?? '1.2'),
   diversityBoost: Number(process.env.RESURFACE_WEIGHT_DIVERSITY_BOOST ?? '8'),
+  sourceDiversityPenalty: Number(process.env.RESURFACE_WEIGHT_SOURCE_DIVERSITY_PENALTY ?? '8'),
   snoozePenalty: Number(process.env.RESURFACE_WEIGHT_SNOOZE_PENALTY ?? '2.5'),
   intentBoost: Number(process.env.RESURFACE_WEIGHT_INTENT_BOOST ?? '6'),
 }
@@ -41,32 +42,30 @@ type ScoredCandidate = {
     freshness: number
     resurfacingGap: number
     diversityBoost: number
+    sourceDiversityPenalty: number
     snoozePenalty: number
     intentBoost: number
   }
 }
 
-function listRecentCategories(limit = 3): string[] {
+function listRecentSurfaces(limit = 3): Array<{ category: string; source: string }> {
   const db = getResurfaceDatabase()
   const rows = db
     .prepare(
       `
-      SELECT category
+      SELECT category, source
       FROM resurface_items
       WHERE last_surfaced_at IS NOT NULL
       ORDER BY last_surfaced_at DESC
       LIMIT ?
     `
     )
-    .all(limit) as Array<{ category?: string }>
+    .all(limit) as Array<{ category: string; source: string }>
 
   return rows
-    .map((row) => row.category)
-    .filter((value): value is string => typeof value === 'string')
 }
 
 function getCandidateRows(
-  limit = 120,
   excludeIds: string[] = []
 ): Record<string, unknown>[] {
   const db = getResurfaceDatabase()
@@ -87,10 +86,9 @@ function getCandidateRows(
       WHERE status IN ('active', 'snoozed')
         AND (suppress_until IS NULL OR datetime(suppress_until) <= datetime('now'))
         ${excludeClause}
-      LIMIT ?
     `
     )
-    .all(...safeExcludeIds, limit) as Record<string, unknown>[]
+    .all(...safeExcludeIds) as Record<string, unknown>[]
 }
 
 function daysSince(iso: string | null): number {
@@ -108,7 +106,8 @@ function computeIntentBoost(tags: string[]): number {
 
 function scoreCandidate(
   item: ResurfaceItem,
-  recentCategories: string[]
+  recentCategories: string[],
+  recentSources: string[]
 ): ScoredCandidate {
   const freshnessRaw = Math.min(daysSince(item.capturedAt), FRESHNESS_MAX_DAYS)
   const resurfacingGapRaw =
@@ -123,6 +122,9 @@ function scoreCandidate(
     freshness: freshnessRaw * DEFAULT_WEIGHTS.freshness,
     resurfacingGap: resurfacingGapRaw * DEFAULT_WEIGHTS.resurfacingGap,
     diversityBoost: diversityRaw * DEFAULT_WEIGHTS.diversityBoost,
+    sourceDiversityPenalty: recentSources.includes(item.source)
+      ? DEFAULT_WEIGHTS.sourceDiversityPenalty
+      : 0,
     snoozePenalty: snoozePenaltyRaw * DEFAULT_WEIGHTS.snoozePenalty,
     intentBoost: intentRaw * DEFAULT_WEIGHTS.intentBoost,
   }
@@ -134,6 +136,7 @@ function scoreCandidate(
       components.freshness +
       components.resurfacingGap +
       components.diversityBoost -
+      components.sourceDiversityPenalty -
       components.snoozePenalty +
       components.intentBoost,
   }
@@ -141,10 +144,11 @@ function scoreCandidate(
 
 function rankCandidates(
   items: ResurfaceItem[],
-  recentCategories: string[]
+  recentCategories: string[],
+  recentSources: string[]
 ): ScoredCandidate[] {
   return items
-    .map((item) => scoreCandidate(item, recentCategories))
+    .map((item) => scoreCandidate(item, recentCategories, recentSources))
     .sort((a, b) => {
       if (b.total !== a.total) {
         return b.total - a.total
@@ -181,12 +185,12 @@ function markSurfaced(candidate: ScoredCandidate): void {
 
 export function getItemsForSession(count = 10): ResurfaceItem[] {
   const safeCount = Math.max(1, Math.min(50, count))
-  const recentCategories = listRecentCategories(3)
+  const recent = listRecentSurfaces(3)
   const candidates = getCandidateRows()
     .map((row) => mapRowToItem(row))
     .filter((item) => item.status === 'active')
 
-  return rankCandidates(candidates, recentCategories)
+  return rankCandidates(candidates, recent.map((row) => row.category), recent.map((row) => row.source))
     .slice(0, safeCount)
     .map((entry) => entry.item)
 }
@@ -206,10 +210,12 @@ function countActiveItems(): number {
 export function getNextItemToSurface(
   excludeIds: string[] = []
 ): NextSurfaceResult {
+  const recent = listRecentSurfaces(3)
   const chosen =
     rankCandidates(
-      getCandidateRows(120, excludeIds).map((row) => mapRowToItem(row)),
-      listRecentCategories(3)
+      getCandidateRows(excludeIds).map((row) => mapRowToItem(row)),
+      recent.map((row) => row.category),
+      recent.map((row) => row.source)
     )[0] ?? null
 
   if (!chosen) {
