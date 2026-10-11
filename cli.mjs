@@ -69,11 +69,11 @@ function resolveDbPath() {
   return path.join(scriptDir, '.resurface', 'resurface.db')
 }
 
-function openDb() {
+function openDb(readOnly = false) {
   const dbPath = resolveDbPath()
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true })
-  const db = new DatabaseSync(dbPath)
-  db.exec(SCHEMA)
+  if (!readOnly) fs.mkdirSync(path.dirname(dbPath), { recursive: true })
+  const db = new DatabaseSync(dbPath, { readOnly })
+  if (!readOnly) db.exec(SCHEMA)
   return { db, dbPath }
 }
 
@@ -323,6 +323,77 @@ function cmdList(values) {
   }
 }
 
+// Agent reads use a read-only connection: no schema setup, enrichment or surface updates.
+function readLimit(raw = '20') {
+  const n = Number(raw)
+  if (!Number.isSafeInteger(n) || n < 1 || n > 1000) {
+    throw new Error('Count must be an integer between 1 and 1000.')
+  }
+  return n
+}
+
+function printReadResults(rows, values) {
+  if (values.json) {
+    console.log(JSON.stringify(rows, null, 2))
+    return
+  }
+  if (!rows.length) console.log('No matching items.')
+  for (const row of rows) {
+    console.log(`[${row.source} / ${row.status}] ${row.title} (${row.id})`)
+    if (row.url) console.log(`  ${row.url}`)
+    if (row.personal_note) console.log(`  Note: ${row.personal_note}`)
+  }
+}
+
+const STOP_WORDS = new Set('the and for with this that from have into your are was has not but you https http www com'.split(' '))
+function relatedTokens(text) {
+  return [...new Set((text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+    .filter(token => token.length >= 3 && !STOP_WORDS.has(token)))]
+}
+
+function cmdRead(command, args, values) {
+  const query = args.join(' ').trim()
+  const limit = readLimit(command === 'recent' ? (args[0] ?? values.limit) : values.limit)
+  if (command !== 'recent' && !query) throw new Error(`Usage: resurface ${command} <${command === 'related' ? 'id or text' : 'query'}> [--json]`)
+  if (command === 'recent' && args.length > 1) throw new Error('Usage: resurface recent [n] [--json]')
+  const { db } = openDb(true)
+  try {
+    // Default includes active, snoozed and archived saves; dropped items are excluded.
+    const statusClause = values.status ? 'status = ?' : "status != 'dropped'"
+    const statusArgs = values.status ? [values.status] : []
+    let rows
+    if (command === 'recent') {
+      rows = db.prepare(`SELECT * FROM resurface_items WHERE ${statusClause}
+        ORDER BY captured_at DESC, id ASC LIMIT ?`).all(...statusArgs, limit)
+    } else if (command === 'search') {
+      rows = db.prepare(`SELECT * FROM resurface_items WHERE ${statusClause} AND (
+        instr(lower(title), lower(?)) > 0 OR instr(lower(coalesce(summary, '')), lower(?)) > 0
+        OR instr(lower(original_text), lower(?)) > 0 OR instr(lower(coalesce(personal_note, '')), lower(?)) > 0)
+        ORDER BY captured_at DESC, id ASC LIMIT ?`).all(...statusArgs, query, query, query, query, limit)
+    } else {
+      const seed = db.prepare('SELECT * FROM resurface_items WHERE id = ?').get(query)
+      const tokens = relatedTokens(seed
+        ? [seed.title, seed.summary, seed.original_text, seed.personal_note, seed.tags_json].filter(Boolean).join(' ')
+        : query)
+      rows = db.prepare(`SELECT * FROM resurface_items WHERE ${statusClause}`).all(...statusArgs)
+        .filter(row => row.id !== seed?.id)
+        .map(row => {
+          const fields = [row.title, row.summary, row.original_text, row.personal_note, row.tags_json]
+            .map(field => new Set(relatedTokens(field ?? '')))
+          const score = tokens.reduce((sum, token) => sum + fields.reduce((n, field, i) =>
+            n + (field.has(token) ? [3, 2, 1, 3, 2][i] : 0), 0), 0)
+          return { ...row, score }
+        })
+        .filter(row => row.score > 0)
+        .sort((a, b) => b.score - a.score || b.captured_at.localeCompare(a.captured_at) || a.id.localeCompare(b.id))
+        .slice(0, limit)
+    }
+    printReadResults(rows, values)
+  } finally {
+    db.close()
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -335,6 +406,7 @@ const { values, positionals } = parseArgs({
     status: { type: 'string', short: 's' },
     limit: { type: 'string', short: 'n' },
     help: { type: 'boolean', short: 'h' },
+    json: { type: 'boolean' },
     'dry-run': { type: 'boolean' },
     vault: { type: 'string' },
     source: { type: 'string', multiple: true },
@@ -350,6 +422,14 @@ Commands:
   add <text or URL>   Add an item to Resurface
     --category, -c    Override category (link|quote|music|tool|article|idea|reference)
     --title, -t       Override title
+
+  search <q>          Search title, summary, original text and personal note
+  recent [n]          Most recently captured saves (default: 20)
+  related <id|text>   Rank saves by shared words (exclude the seed item)
+    --json            JSON array of database rows; related includes score
+    --limit, -n       Max results, 1–1000 (default: 20)
+    --status, -s      Optional exact status; default excludes dropped
+    These three commands open SQLite read-only and require an existing database.
 
   stats               Show item counts by status, category, and source
 
@@ -557,6 +637,16 @@ function cmdIngestObsidian(values) {
 }
 
 switch (command) {
+  case 'search':
+  case 'recent':
+  case 'related':
+    try {
+      cmdRead(command, positionals.slice(1), values)
+    } catch (error) {
+      console.error(error.message)
+      process.exitCode = 1
+    }
+    break
   case 'add':
     cmdAdd(positionals.slice(1), values)
     break

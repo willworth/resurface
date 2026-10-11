@@ -152,7 +152,7 @@ See `desktop/README.md` for build and install details.
 
 ## CLI
 
-The CLI writes directly to SQLite — no server needed. Good for scripts and AI agents.
+The CLI accesses SQLite directly with no server or build step. Capture commands write items; agent read commands open an existing database read-only, without schema changes or resurfacing updates.
 
 ```bash
 node cli.mjs add "https://example.com/article"          # Auto-classified as 'link'
@@ -163,17 +163,43 @@ node cli.mjs list --status snoozed --limit 10            # Filter items
 node cli.mjs obsidian                                    # Import from Obsidian vault
 ```
 
+### Read-only agent access
+
+From the repository directory (or use the absolute path to `cli.mjs`):
+
+```bash
+node cli.mjs search "music" --json
+node cli.mjs recent 10 --json
+node cli.mjs related <item-id> --json
+node cli.mjs related "spaced repetition" --json --limit 5
+```
+
+`search` performs a case-insensitive literal substring search over title, summary,
+original text and personal note. `recent` sorts by capture time, newest first.
+`related` ranks by shared words in those fields plus tags, with more weight on
+notes and titles; it is lexical matching, not semantic search. An exact item ID
+uses that item's text and omits it from the results.
+
+All three include active, snoozed and archived saves by default, excluding dropped
+items. Use `--status active` (or another exact status) to narrow results. The default
+limit is 20; `--limit` and the optional `recent` count accept 1–1000. `--json` prints
+an array of full SQLite rows with snake_case fields, including IDs, URLs, sources,
+statuses and notes; `related` also includes a numeric `score`. No matches gives `[]`.
+Set `RESURFACE_SQLITE_PATH` to read another existing database. Missing databases and
+invalid arguments exit nonzero without creating a database.
+
 ## Resurfacing algorithm
 
 Items are scored using a weighted formula (all weights configurable via environment variables):
 
 - **Freshness** — newer items score higher
 - **Resurfacing gap** — items not seen for a long time score higher
-- **Diversity boost** — avoids showing the same category repeatedly
+- **Diversity boost** — favours categories absent from the last three surfaced items
+- **Source diversity penalty** — subtracts 8 points for a source among the last three surfaced items (`RESURFACE_WEIGHT_SOURCE_DIVERSITY_PENALTY` overrides it); this encourages mixing rather than guaranteeing alternation
 - **Snooze penalty** — frequently-snoozed items score lower
 - **Intent boost** — tagged items (urgent, research, buy) score higher
 
-Never-surfaced items are prioritised. After 5 snoozes, the "Later" option is disabled and you must archive or drop.
+Every eligible row is scored, with no insertion-order window. Never-surfaced items receive a resurfacing-gap boost. After 5 snoozes, the "Later" option is disabled and you must archive or drop.
 
 Telemetry: all actions (ingest, surface, archive, snooze, drop) are logged to a `resurface_events` table for future analytics.
 
