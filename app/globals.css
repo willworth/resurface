@@ -1989,3 +1989,512 @@ textarea:focus-visible {
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   Library card, pass 2 (12 Oct 2026): content first, the link in the corner,
+   decisions and the note action at the foot, a real checkbox for select.
+   ========================================================================== */
+
+.library-grid {
+  column-gap: 1.5rem;
+}
+
+.library-card {
+  gap: 0.95rem;
+  margin-bottom: 1.5rem;
+  padding: 1.15rem 1.35rem 0.85rem;
+}
+
+.library-card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.library-meta-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.4rem;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.library-meta-sep {
+  color: rgba(171, 181, 187, 0.5);
+}
+
+.library-meta-left .library-source {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12rem;
+}
+
+.library-meta-left .library-snooze {
+  color: var(--snooze);
+}
+
+/* Select: a recognisable checkbox, keyboard-operable (Space). */
+.card-select {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -4px;
+  cursor: pointer;
+}
+
+.card-select-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.card-select-box {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid rgba(171, 181, 187, 0.6);
+  border-radius: 5px;
+  background: rgba(14, 22, 30, 0.6);
+  color: transparent;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.card-select-box .card-icon-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.card-select:hover .card-select-box {
+  border-color: #8fc7ef;
+}
+
+.card-select-input:checked + .card-select-box {
+  border-color: #8fc7ef;
+  background: #8fc7ef;
+  color: #101922;
+}
+
+.card-select-input:focus-visible + .card-select-box {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Top-right corner: star and open link. */
+.library-card-corner {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.library-card-corner .card-icon-btn {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.library-card-corner .card-icon-btn:hover:not(:disabled) {
+  border-color: rgba(209, 176, 115, 0.55);
+  background: rgba(209, 176, 115, 0.1);
+}
+
+.library-card-corner .star-card-btn-active {
+  border-color: rgba(209, 176, 115, 0.5);
+  background: rgba(209, 176, 115, 0.14);
+}
+
+.card-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 34px;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(143, 199, 239, 0.35);
+  border-radius: 999px;
+  color: var(--link);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.card-open-link:hover {
+  border-color: var(--link);
+  background: rgba(143, 199, 239, 0.12);
+}
+
+.card-open-link .card-icon-svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+/* Body: image only when it actually loads; avatars sit beside the title. */
+.library-card-body {
+  gap: 0.6rem;
+}
+
+.library-card-image-wrap {
+  border-radius: 0.7rem;
+  margin-bottom: 0.15rem;
+}
+
+.library-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.library-card-title-row .library-card-title {
+  min-width: 0;
+  flex: 1;
+}
+
+.library-card-avatar {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.library-card-excerpt {
+  color: #c9d3dc;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.library-card-note-block,
+.library-card-note-editor {
+  margin-top: 0.35rem;
+}
+
+/* Foot: note action left, decisions right; quiet until hovered. */
+.library-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid rgba(57, 70, 79, 0.7);
+}
+
+.library-card-decide {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+
+.card-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 36px;
+  padding: 0 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.card-text-btn .card-icon-svg {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.card-text-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(143, 199, 239, 0.1);
+}
+
+.card-text-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.card-note-add-btn {
+  margin-left: -0.6rem;
+}
+
+.card-note-add-btn:hover:not(:disabled) {
+  color: #d1f4ec;
+  background: rgba(121, 192, 178, 0.12);
+}
+
+.card-text-btn.card-archive-btn:hover:not(:disabled) {
+  color: #d1f4ec;
+  background: rgba(121, 192, 178, 0.14);
+}
+
+.card-text-btn.card-discard-btn:hover:not(:disabled) {
+  color: #ffb8b2;
+  background: rgba(220, 125, 116, 0.14);
+}
+
+.card-text-btn.card-restore-btn {
+  color: var(--primary);
+  border-color: transparent;
+  background: transparent;
+}
+
+.card-text-btn.card-restore-btn:hover:not(:disabled),
+.card-text-btn.card-unarchive-btn:hover:not(:disabled) {
+  color: #e6faf5;
+  background: rgba(121, 192, 178, 0.16);
+}
+
+.library-card-decide .card-more-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.library-card-decide .card-more-btn:hover,
+.library-card-decide .card-more-btn.card-icon-btn-active {
+  border-color: rgba(143, 199, 239, 0.4);
+  background: rgba(143, 199, 239, 0.1);
+}
+
+@media (max-width: 600px) {
+  .library-card {
+    padding: 1rem 1.1rem 0.7rem;
+  }
+
+  .card-select {
+    width: 44px;
+    height: 44px;
+    margin: -8px -8px -8px -12px;
+  }
+
+  .library-card-corner .card-icon-btn,
+  .library-card-decide .card-more-btn {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .card-open-link,
+  .card-text-btn {
+    min-height: 44px;
+  }
+
+  .library-meta-left .library-source {
+    max-width: 9rem;
+  }
+}
+
+/* ==========================================================================
+   Review card, pass 2: what it is first (meta, star and Open in the corner),
+   then your note, then a distinct decision band at the foot.
+   ========================================================================== */
+
+.card {
+  --card-pad: 2rem;
+  padding: 1.6rem var(--card-pad) var(--card-pad);
+  gap: 0.85rem;
+}
+
+.review-head {
+  align-items: center;
+  margin-bottom: 0.15rem;
+}
+
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.1rem 0.45rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.review-meta-sep {
+  color: rgba(171, 181, 187, 0.5);
+}
+
+.review-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 18rem;
+}
+
+.review-meta .snooze-count {
+  margin-left: 0.35rem;
+}
+
+.review-corner {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: none;
+}
+
+.review-corner .star-inline-btn {
+  min-height: 36px;
+  padding: 0 0.75rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-color: rgba(209, 176, 115, 0.35);
+  background: transparent;
+}
+
+.review-corner .star-inline-btn:hover:not(:disabled),
+.review-corner .star-inline-btn-active {
+  border-color: rgba(209, 176, 115, 0.8);
+  background: rgba(209, 176, 115, 0.14);
+}
+
+.review-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 36px;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(143, 199, 239, 0.45);
+  border-radius: 999px;
+  background: rgba(143, 199, 239, 0.08);
+  color: var(--link);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.review-open-btn:hover {
+  border-color: var(--link);
+  background: rgba(143, 199, 239, 0.16);
+}
+
+.review-image-wrap {
+  overflow: hidden;
+  border-radius: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.review-image {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+}
+
+.review-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.review-title-row h2 {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-avatar {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  margin-top: 0.2rem;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.card .personal-note-section {
+  margin: 0.35rem 0 0;
+}
+
+.review-decide {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.6rem calc(var(--card-pad) * -1) calc(var(--card-pad) * -1);
+  padding: 1.1rem var(--card-pad) 1.2rem;
+  border-top: 1px solid rgba(57, 70, 79, 0.85);
+  border-radius: 0 0 calc(1rem - 1px) calc(1rem - 4px);
+  background: rgba(9, 15, 20, 0.28);
+}
+
+.archive-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.archive-row .archive-label {
+  white-space: nowrap;
+}
+
+.archive-row .archive-input {
+  padding: 0.5rem 0.7rem;
+}
+
+.review-decide .shortcut-cheat {
+  padding-top: 0;
+  gap: 0.4rem 0.9rem;
+  opacity: 0.85;
+}
+
+@media (max-width: 600px) {
+  .card {
+    --card-pad: 1.15rem;
+    padding: 1.1rem var(--card-pad) var(--card-pad);
+    border-radius: 0.85rem;
+  }
+
+  .review-head {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .review-corner {
+    margin-left: auto;
+  }
+
+  .review-corner .star-inline-btn,
+  .review-open-btn {
+    min-height: 44px;
+  }
+
+  .review-host {
+    max-width: 11rem;
+  }
+
+  .review-decide {
+    border-radius: 0 0 calc(0.85rem - 1px) calc(0.85rem - 4px);
+  }
+
+  .archive-row {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+}

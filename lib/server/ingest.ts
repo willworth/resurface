@@ -159,6 +159,19 @@ function findExistingCapture(params: {
   }
 }
 
+/**
+ * Store capture dates as ISO-8601 so they sort correctly as text. X/Twitter
+ * exports use "Wed May 20 23:48:50 +0000 2026"; anything already ISO-like or
+ * unparseable is kept exactly as given.
+ */
+export function normalizeCapturedAt(value: string | undefined): string | undefined {
+  if (!value) return value
+  const trimmed = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed
+  const parsed = Date.parse(trimmed)
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : trimmed
+}
+
 function insertCapture(params: {
   source: string
   sourceItemId: string | null
@@ -223,7 +236,7 @@ function insertCapture(params: {
       JSON.stringify(params.tags ?? deriveTags(params.text, params.url)),
       params.source,
       params.sourceItemId,
-      params.capturedAt ?? nowIso,
+      normalizeCapturedAt(params.capturedAt) ?? nowIso,
       nowIso,
       'active',
       params.fingerprint,

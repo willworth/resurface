@@ -63,6 +63,7 @@ type ListResponse = {
 }
 
 type SortCol =
+  | 'mixed'
   | 'captured_at'
   | 'title'
   | 'category'
@@ -99,29 +100,61 @@ function OpenInNewIcon() {
   )
 }
 
-function SelectIcon({ selected }: { selected: boolean }) {
+function CheckIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
-      <rect
-        x="4.2"
-        y="4.2"
-        width="11.6"
-        height="11.6"
-        rx="2.6"
-        fill={selected ? 'currentColor' : 'none'}
+      <path
+        d="M5 10.4 8.4 13.7 15 6.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function CrossIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
+      <path
+        d="M6 6l8 8M14 6l-8 8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function RestoreIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
+      <path
+        d="M4.8 8.2A5.6 5.6 0 1 1 4.6 12M4.6 4.6v3.8h3.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function NotePlusIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
+      <path
+        d="M10.5 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h8a1.5 1.5 0 0 0 1.5-1.5V9.5M7.5 9h4M7.5 12h2.5M14.5 3.5v4M12.5 5.5h4"
+        fill="none"
         stroke="currentColor"
         strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      {selected ? (
-        <path
-          d="M7 10.2 9.1 12.3 13.2 8.2"
-          fill="none"
-          stroke="#101922"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      ) : null}
     </svg>
   )
 }
@@ -172,25 +205,8 @@ function CogIcon() {
   )
 }
 
-function NoteIcon({ hasNote }: { hasNote: boolean }) {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="card-icon-svg">
-      <path
-        d="M4.5 4.5h11a1.5 1.5 0 0 1 1.5 1.5v7.5a1.5 1.5 0 0 1-1.5 1.5H8L4.5 18v-12A1.5 1.5 0 0 1 4.5 4.5Z"
-        fill={hasNote ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="1.35"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M7.5 8h5M7.5 11h3"
-        fill="none"
-        stroke={hasNote ? '#101922' : 'currentColor'}
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
+function isAvatarImage(url: string): boolean {
+  return /\/profile_images\//.test(url)
 }
 
 function daysAgo(iso: string): string {
@@ -313,6 +329,7 @@ function sourceLabel(source: string): string {
 
 function sortLabel(col: SortCol): string {
   const labels: Record<SortCol, string> = {
+    mixed: 'Mix',
     captured_at: 'Newest',
     title: 'Title',
     category: 'Category',
@@ -323,6 +340,12 @@ function sortLabel(col: SortCol): string {
     random: 'Random',
   }
   return labels[col]
+}
+
+function sortHint(col: SortCol): string | undefined {
+  if (col === 'mixed') return 'Takes turns between sources, newest first within each'
+  if (col === 'random') return 'A fresh shuffle each time'
+  return undefined
 }
 
 function canArchive(status: string): boolean {
@@ -349,7 +372,9 @@ export function ItemsClient() {
   const [items, setItems] = useState<ListItem[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [status, setStatus] = useState('active')
-  const [sort, setSort] = useState<SortCol>('captured_at')
+  // Mix is the default so one big import (e.g. X bookmarks) can't fill the
+  // first screen; Newest is one click away.
+  const [sort, setSort] = useState<SortCol>('mixed')
   const [dir, setDir] = useState<'desc' | 'asc'>('desc')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -359,6 +384,12 @@ export function ItemsClient() {
   const [cacheNotice, setCacheNotice] = useState<string | null>(null)
   const [showingCachedData, setShowingCachedData] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [brokenImageIds, setBrokenImageIds] = useState<string[]>([])
+  const markImageBroken = useCallback((id: string) => {
+    setBrokenImageIds((current) =>
+      current.includes(id) ? current : [...current, id]
+    )
+  }, [])
   const [menuItemId, setMenuItemId] = useState<string | null>(null)
   const [batchSnoozeOpen, setBatchSnoozeOpen] = useState(false)
   const [utilitiesOpen, setUtilitiesOpen] = useState(false)
@@ -1099,6 +1130,7 @@ export function ItemsClient() {
   )
 
   const sortOptions: SortCol[] = [
+    'mixed',
     'captured_at',
     'random',
     'title',
@@ -1384,8 +1416,10 @@ export function ItemsClient() {
                     type="button"
                     className={`tab ${sort === option ? 'tab-active' : ''}`}
                     disabled={noteNavigationBlocked}
+                    title={sortHint(option)}
+                    aria-pressed={sort === option}
                     onClick={() => {
-                      if (sort === option && option !== 'random') {
+                      if (sort === option && option !== 'random' && option !== 'mixed') {
                         setDir((current) =>
                           current === 'desc' ? 'asc' : 'desc'
                         )
@@ -1396,7 +1430,7 @@ export function ItemsClient() {
                     }}
                   >
                     {sortLabel(option)}
-                    {sort === option && option !== 'random'
+                    {sort === option && option !== 'random' && option !== 'mixed'
                       ? dir === 'desc'
                         ? ' ↓'
                         : ' ↑'
@@ -1460,256 +1494,125 @@ export function ItemsClient() {
                   key={item.id}
                   className={`library-card library-card-${item.category}${selected ? ' library-card-selected' : ''}`}
                 >
-                  <div className="library-card-meta">
+                  <div className="library-card-head">
+                    <label
+                      className="card-select"
+                      title={selected ? 'Deselect card' : 'Select card'}
+                    >
+                      <input
+                        type="checkbox"
+                        className="card-select-input"
+                        checked={selected}
+                        onChange={() => toggleSelection(item.id)}
+                        aria-label={selected ? 'Deselect card' : 'Select card'}
+                      />
+                      <span className="card-select-box" aria-hidden="true">
+                        <CheckIcon />
+                      </span>
+                    </label>
+
                     <div className="library-meta-left">
                       <span className={`cat-badge cat-${item.category}`}>
                         {item.category}
                       </span>
+                      <span className="library-meta-sep" aria-hidden="true">·</span>
                       <span className="library-age">{daysAgo(item.capturedAt)}</span>
+                      <span className="library-meta-sep" aria-hidden="true">·</span>
+                      <span className="library-source">
+                        {item.previewSiteName ?? sourceLabel(item.source)}
+                      </span>
+                      {item.snoozeCount > 0 ? (
+                        <span className="library-snooze">
+                          snoozed {item.snoozeCount}
+                        </span>
+                      ) : null}
                     </div>
 
-                    <div className="library-card-controls">
-                      {item.status === 'dropped' ? (
-                        <button
-                          type="button"
-                          className="card-action-btn card-restore-btn"
-                          title="Restore item to previous state"
-                          onClick={() => void restoreSingle(item)}
-                          disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                        >
-                          Restore
-                        </button>
-                      ) : (
-                        <>
-                          {item.status === 'archived' ? (
-                            <button
-                              type="button"
-                              className="card-action-btn card-unarchive-btn"
-                              title="Return this item to review queue"
-                              onClick={() => void unarchiveSingle(item)}
-                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                            >
-                              Review
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="card-action-btn card-archive-btn"
-                              title="Archive (keep in library, stop resurfacing)"
-                              onClick={() => void archiveSingle(item)}
-                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                            >
-                              Archive
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            className="card-action-btn card-discard-btn"
-                            title="Discard (move to bin, recoverable)"
-                            onClick={() => void discardSingle(item)}
-                            disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                          >
-                            Discard
-                          </button>
-                        </>
-                      )}
-
-                      {item.url ? (
-                        <button
-                          type="button"
-                          className="card-icon-btn"
-                          title="Open link in new tab"
-                          onClick={() => openItem(item)}
-                        >
-                          <OpenInNewIcon />
-                        </button>
-                      ) : null}
-
+                    <div className="library-card-corner">
                       <button
                         type="button"
                         className={`card-icon-btn star-card-btn${item.pinnedAt ? ' card-icon-btn-active star-card-btn-active' : ''}`}
                         title={item.pinnedAt ? 'Remove star' : 'Star this'}
+                        aria-label={item.pinnedAt ? 'Remove star' : 'Star this'}
+                        aria-pressed={Boolean(item.pinnedAt)}
                         onClick={() => void toggleStar(item)}
                         disabled={actionBusy || showingCachedData || noteNavigationBlocked}
                       >
                         <StarIcon filled={Boolean(item.pinnedAt)} />
                       </button>
-
-                      <button
-                        type="button"
-                        className={`card-icon-btn note-card-btn${item.personalNote ? ' card-icon-btn-active note-card-btn-active' : ''}`}
-                        title={item.personalNote ? 'Edit note' : 'Add note'}
-                        onClick={() => startEditingNote(item)}
-                        disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                        aria-label={item.personalNote ? 'Edit note' : 'Add note'}
-                      >
-                        <NoteIcon hasNote={Boolean(item.personalNote)} />
-                      </button>
-
-                      <button
-                        type="button"
-                        className={`card-icon-btn${selected ? ' card-icon-btn-active' : ''}`}
-                        title={selected ? 'Deselect card' : 'Select card'}
-                        onClick={() => toggleSelection(item.id)}
-                      >
-                        <SelectIcon selected={selected} />
-                      </button>
-
-                      <div className="card-menu-wrap">
-                        <button
-                          type="button"
-                          className={`card-icon-btn${menuItemId === item.id ? ' card-icon-btn-active' : ''}`}
-                          title="More actions"
-                          onClick={() =>
-                            setMenuItemId((current) =>
-                              current === item.id ? null : item.id
-                            )
-                          }
-                        >
-                          <MoreIcon />
-                        </button>
-
-                        {menuItemId === item.id ? (
-                          <div className="action-popover action-popover-card">
-                            <button
-                              type="button"
-                              className="popover-action"
-                              onClick={() => {
-                                setMenuItemId(null)
-                                startEditingNote(item)
-                              }}
-                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                            >
-                              {item.personalNote ? 'Edit note' : 'Add note'}
-                            </button>
-
-                            {item.url ? (
-                              <button
-                                type="button"
-                                className="popover-action"
-                                onClick={() => openItem(item)}
-                              >
-                                Open
-                              </button>
-                            ) : null}
-
-                            {item.status === 'dropped' ? (
-                              <button
-                                type="button"
-                                className="popover-action"
-                                onClick={() => void restoreSingle(item)}
-                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                              >
-                                Restore
-                              </button>
-                            ) : null}
-
-                            {canArchive(item.status) ? (
-                              <button
-                                type="button"
-                                className="popover-action"
-                                onClick={() => void archiveSingle(item)}
-                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                              >
-                                Archive
-                              </button>
-                            ) : null}
-
-                            {canUnarchive(item.status) ? (
-                              <button
-                                type="button"
-                                className="popover-action"
-                                onClick={() => void unarchiveSingle(item)}
-                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                              >
-                                Return to review
-                              </button>
-                            ) : null}
-
-                            {canSnooze(item.status) ? (
-                              <div className="popover-group">
-                                <span className="popover-label">Snooze</span>
-                                {SNOOZE_OPTIONS.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    className="popover-action"
-                                    onClick={() =>
-                                      void performAction(
-                                        [item],
-                                        'snooze',
-                                        option.value
-                                      )
-                                    }
-                                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : null}
-
-                            {canDiscard(item.status) ? (
-                              <button
-                                type="button"
-                                className="popover-action popover-action-danger"
-                                onClick={() => void discardSingle(item)}
-                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
-                              >
-                                Discard
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="library-card-body">
-                    {item.previewImageUrl ? (
-                      item.url ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="library-image-link"
-                        >
-                          <div className="library-card-image-wrap">
-                            <img
-                              src={item.previewImageUrl}
-                              alt=""
-                              className="library-card-image"
-                              loading="lazy"
-                            />
-                          </div>
-                        </a>
-                      ) : (
-                        <div className="library-card-image-wrap">
-                          <img
-                            src={item.previewImageUrl}
-                            alt=""
-                            className="library-card-image"
-                            loading="lazy"
-                          />
-                        </div>
-                      )
-                    ) : null}
-
-                    <h2 className="library-card-title">
                       {item.url ? (
                         <a
                           href={item.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="item-link"
+                          className="card-open-link"
+                          title="Open link in new tab"
+                          aria-label="Open link in new tab"
                         >
-                          {title}
+                          <span className="card-open-text">Open</span>
+                          <OpenInNewIcon />
                         </a>
-                      ) : (
-                        <span>{title}</span>
-                      )}
-                    </h2>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="library-card-body">
+                    {(() => {
+                      const imageUrl =
+                        item.previewImageUrl &&
+                        !brokenImageIds.includes(`${item.id}|${item.previewImageUrl}`)
+                          ? item.previewImageUrl
+                          : null
+                      const avatar = imageUrl ? isAvatarImage(imageUrl) : false
+                      const heading = (
+                        <h2 className="library-card-title">
+                          {item.url ? (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="item-link"
+                            >
+                              {title}
+                            </a>
+                          ) : (
+                            <span>{title}</span>
+                          )}
+                        </h2>
+                      )
+
+                      if (imageUrl && avatar) {
+                        return (
+                          <div className="library-card-title-row">
+                            <img
+                              src={imageUrl}
+                              alt=""
+                              className="library-card-avatar"
+                              loading="lazy"
+                              onError={() => markImageBroken(`${item.id}|${imageUrl}`)}
+                            />
+                            {heading}
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <>
+                          {imageUrl ? (
+                            <div className="library-card-image-wrap">
+                              <img
+                                src={imageUrl}
+                                alt=""
+                                className="library-card-image"
+                                loading="lazy"
+                                onError={() => markImageBroken(`${item.id}|${imageUrl}`)}
+                              />
+                            </div>
+                          ) : null}
+                          {heading}
+                        </>
+                      )
+                    })()}
 
                     {excerpt ? (
                       <p className="library-card-excerpt">{excerpt}</p>
@@ -1717,9 +1620,6 @@ export function ItemsClient() {
 
                     {item.archivedTo ? (
                       <p className="archived-to">Archived in {item.archivedTo}</p>
-                    ) : null}
-                    {item.pinnedAt ? (
-                      <p className="starred-card-note">★ Starred</p>
                     ) : null}
 
                     {editingNoteItemId === item.id ? (
@@ -1840,15 +1740,182 @@ export function ItemsClient() {
                     ) : null}
                   </div>
 
-                  <div className="library-card-footer">
-                    <span className="library-source">
-                      {item.previewSiteName ?? sourceLabel(item.source)}
-                    </span>
-                    {item.snoozeCount > 0 ? (
-                      <span className="library-snooze">
-                        snoozed {item.snoozeCount}
-                      </span>
+                  <div className="library-card-actions">
+                    {editingNoteItemId !== item.id && !item.personalNote ? (
+                      <button
+                        type="button"
+                        className="card-text-btn card-note-add-btn"
+                        title="Add a personal note to this card"
+                        aria-label="Add note"
+                        onClick={() => startEditingNote(item)}
+                        disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                      >
+                        <NotePlusIcon />
+                        <span>Add note</span>
+                      </button>
                     ) : null}
+
+                    <div className="library-card-decide">
+                      {item.status === 'dropped' ? (
+                        <button
+                          type="button"
+                          className="card-text-btn card-restore-btn"
+                          title="Restore item to previous state"
+                          onClick={() => void restoreSingle(item)}
+                          disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                        >
+                          <RestoreIcon />
+                          <span>Restore</span>
+                        </button>
+                      ) : (
+                        <>
+                          {item.status === 'archived' ? (
+                            <button
+                              type="button"
+                              className="card-text-btn card-unarchive-btn"
+                              title="Return this item to review queue"
+                              onClick={() => void unarchiveSingle(item)}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                            >
+                              <RestoreIcon />
+                              <span>Review</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="card-text-btn card-archive-btn"
+                              title="Archive (keep in library, stop resurfacing)"
+                              onClick={() => void archiveSingle(item)}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                            >
+                              <CheckIcon />
+                              <span>Archive</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            className="card-text-btn card-discard-btn"
+                            title="Discard (move to bin, recoverable)"
+                            onClick={() => void discardSingle(item)}
+                            disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                          >
+                            <CrossIcon />
+                            <span>Discard</span>
+                          </button>
+                        </>
+                      )}
+
+                      <div className="card-menu-wrap">
+                        <button
+                          type="button"
+                          className={`card-icon-btn card-more-btn${menuItemId === item.id ? ' card-icon-btn-active' : ''}`}
+                          title="More actions: snooze, open, notes"
+                          aria-label="More actions"
+                          aria-expanded={menuItemId === item.id}
+                          onClick={() =>
+                            setMenuItemId((current) =>
+                              current === item.id ? null : item.id
+                            )
+                          }
+                        >
+                          <MoreIcon />
+                        </button>
+
+                        {menuItemId === item.id ? (
+                          <div className="action-popover action-popover-card">
+                            <button
+                              type="button"
+                              className="popover-action"
+                              onClick={() => {
+                                setMenuItemId(null)
+                                startEditingNote(item)
+                              }}
+                              disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                            >
+                              {item.personalNote ? 'Edit note' : 'Add note'}
+                            </button>
+
+                            {item.url ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => openItem(item)}
+                              >
+                                Open
+                              </button>
+                            ) : null}
+
+                            {item.status === 'dropped' ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => void restoreSingle(item)}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                              >
+                                Restore
+                              </button>
+                            ) : null}
+
+                            {canArchive(item.status) ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => void archiveSingle(item)}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                              >
+                                Archive
+                              </button>
+                            ) : null}
+
+                            {canUnarchive(item.status) ? (
+                              <button
+                                type="button"
+                                className="popover-action"
+                                onClick={() => void unarchiveSingle(item)}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                              >
+                                Return to review
+                              </button>
+                            ) : null}
+
+                            {canSnooze(item.status) ? (
+                              <div className="popover-group">
+                                <span className="popover-label">Snooze</span>
+                                {SNOOZE_OPTIONS.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    className="popover-action"
+                                    onClick={() =>
+                                      void performAction(
+                                        [item],
+                                        'snooze',
+                                        option.value
+                                      )
+                                    }
+                                    disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+
+                            {canDiscard(item.status) ? (
+                              <button
+                                type="button"
+                                className="popover-action popover-action-danger"
+                                onClick={() => void discardSingle(item)}
+                                disabled={actionBusy || showingCachedData || noteNavigationBlocked}
+                              >
+                                Discard
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 </article>
               )

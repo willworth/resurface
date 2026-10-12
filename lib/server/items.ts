@@ -21,6 +21,23 @@ const SORT_COLUMNS: Record<string, string> = {
   random: 'RANDOM()',
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * Sortable form of captured_at. Most rows hold ISO-8601, but the original X
+ * bookmark import stored Twitter's "Wed May 20 23:48:50 +0000 2026" format,
+ * which sorts above every ISO date as text and so crowded the top of Newest.
+ * This rewrites that one shape to ISO inside the query; stored data is unchanged.
+ */
+export const CAPTURED_AT_SORT_EXPR = `(CASE WHEN captured_at GLOB '[A-Z][a-z][a-z] [A-Z][a-z][a-z] [0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] +0000 [0-9][0-9][0-9][0-9]'
+  THEN substr(captured_at, 27, 4) || '-' || (CASE substr(captured_at, 5, 3) ${MONTHS.map(
+    (month, index) => `WHEN '${month}' THEN '${String(index + 1).padStart(2, '0')}'`
+  ).join(' ')} ELSE '00' END) || '-' || substr(captured_at, 9, 2) || 'T' || substr(captured_at, 12, 8) || 'Z'
+  ELSE captured_at END)`
+
+/** TickTick lists count as one source for mixing, so they don't take five turns. */
+const MIX_SOURCE_EXPR = `(CASE WHEN source LIKE 'ticktick:%' THEN 'ticktick' ELSE source END)`
+
 export type ItemListOptions = {
   status?: string | null
   sort?: string | null
@@ -94,7 +111,14 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
   const safePage = Math.max(1, Number(options.page ?? 1))
   const offset = (safePage - 1) * safeLimit
   const orderCol = SORT_COLUMNS[sort] ?? 'captured_at'
-  const orderClause = sort === 'random' ? 'RANDOM()' : `${orderCol} ${dir}`
+  const orderClause =
+    sort === 'random'
+      ? 'RANDOM()'
+      : sort === 'mixed'
+        ? `mix_rank ASC, ${CAPTURED_AT_SORT_EXPR} DESC, id ASC`
+        : orderCol === 'captured_at'
+          ? `${CAPTURED_AT_SORT_EXPR} ${dir}, id ASC`
+          : `${orderCol} ${dir}`
 
   const db = getResurfaceDatabase()
   const where: string[] = []
@@ -136,9 +160,18 @@ export function listItems(options: ItemListOptions = {}): ItemListResult {
 
   const whereClause = where.join(' AND ')
 
+  // "Mixed" deals round-robin across sources: the newest item from each
+  // source, then the second newest from each, and so on. Stable across pages,
+  // unlike Random, and one large import can't fill the first screen.
+  const fromClause =
+    sort === 'mixed'
+      ? `(SELECT *, ROW_NUMBER() OVER (PARTITION BY ${MIX_SOURCE_EXPR} ORDER BY ${CAPTURED_AT_SORT_EXPR} DESC, id ASC) AS mix_rank
+          FROM resurface_items WHERE ${whereClause})`
+      : `resurface_items WHERE ${whereClause}`
+
   const rows = db
     .prepare(
-      `SELECT * FROM resurface_items WHERE ${whereClause}
+      `SELECT * FROM ${fromClause}
        ORDER BY ${orderClause} LIMIT ? OFFSET ?`
     )
     .all(...values, safeLimit, offset) as Record<string, unknown>[]

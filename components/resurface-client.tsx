@@ -58,6 +58,15 @@ function daysAgoLabel(days: number): string {
   return `${Math.floor(days / 365)}y ago`
 }
 
+function itemHost(url: string | null): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return null
+  }
+}
+
 function categoryClassName(category: ResurfaceItem['category']): string {
   const map: Record<string, string> = {
     music: 'card card-music',
@@ -272,6 +281,7 @@ export function ResurfaceClient() {
   const [transitioning, setTransitioning] = useState(false)
   const [passedIds, setPassedIds] = useState<string[]>([])
   const [homeSearch, setHomeSearch] = useState('')
+  const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null)
   const [recentDiscards, setRecentDiscards] = useState<
     Array<{ id: string; title: string }>
   >([])
@@ -867,45 +877,85 @@ export function ResurfaceClient() {
           <article
             className={`${categoryClassName(item.category)}${transitioning ? ' fading' : ''}`}
           >
-            <div className="meta-row">
-              <span className="badge">{CATEGORY_LABELS[item.category]}</span>
-              <div className="meta-right">
-                {item.pinnedAt ? <span className="starred-label">starred</span> : null}
+            <div className="meta-row review-head">
+              <div className="review-meta">
+                <span className="badge">{CATEGORY_LABELS[item.category]}</span>
+                <span className="review-meta-sep" aria-hidden="true">·</span>
+                <span className="saved">{daysAgoLabel(savedDaysAgo)}</span>
+                {itemHost(item.url) ? (
+                  <>
+                    <span className="review-meta-sep" aria-hidden="true">·</span>
+                    <span className="review-host">{itemHost(item.url)}</span>
+                  </>
+                ) : null}
                 {item.snoozeCount > 0 ? (
                   <span className="snooze-count">
                     snoozed {item.snoozeCount}/5
                   </span>
                 ) : null}
-                <span className="saved">{daysAgoLabel(savedDaysAgo)}</span>
+              </div>
+              <div className="review-corner">
+                <button
+                  type="button"
+                  className={`star-inline-btn${item.pinnedAt ? ' star-inline-btn-active' : ''}`}
+                  onClick={() => void onToggleStar()}
+                  disabled={showingCachedData}
+                  title={item.pinnedAt ? 'Remove star' : 'Star this'}
+                  aria-pressed={Boolean(item.pinnedAt)}
+                >
+                  {item.pinnedAt ? '★ Starred' : '☆ Star'}
+                </button>
+                {item.url ? (
+                  <button
+                    type="button"
+                    className="review-open-btn"
+                    onClick={onOpen}
+                    title={`Open ${item.url} in a new tab (O)`}
+                  >
+                    Open <span aria-hidden="true">↗</span>
+                  </button>
+                ) : null}
               </div>
             </div>
 
-            <h2>{title}</h2>
+            {(() => {
+              const imageUrl =
+                item.previewImageUrl && item.previewImageUrl !== brokenImageUrl
+                  ? item.previewImageUrl
+                  : null
+              if (imageUrl && /\/profile_images\//.test(imageUrl)) {
+                return (
+                  <div className="review-title-row">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt=""
+                      className="review-avatar"
+                      onError={() => setBrokenImageUrl(imageUrl)}
+                    />
+                    <h2>{title}</h2>
+                  </div>
+                )
+              }
+              return (
+                <>
+                  {imageUrl ? (
+                    <div className="review-image-wrap">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={imageUrl}
+                        alt=""
+                        className="review-image"
+                        onError={() => setBrokenImageUrl(imageUrl)}
+                      />
+                    </div>
+                  ) : null}
+                  <h2>{title}</h2>
+                </>
+              )
+            })()}
             {description ? <p className="description">{description}</p> : null}
             {summary ? <p className="summary">{summary}</p> : null}
-
-            {item.url ? (
-              <button type="button" className="link" onClick={onOpen}>
-                {(() => {
-                  try {
-                    const u = new URL(item.url)
-                    return u.hostname.replace('www.', '') + u.pathname
-                  } catch {
-                    return item.url
-                  }
-                })()}
-              </button>
-            ) : null}
-
-            <button
-              type="button"
-              className={`star-inline-btn${item.pinnedAt ? ' star-inline-btn-active' : ''}`}
-              onClick={() => void onToggleStar()}
-              disabled={showingCachedData}
-              title={item.pinnedAt ? 'Remove star' : 'Star this'}
-            >
-              {item.pinnedAt ? '★ Starred' : '☆ Star'}
-            </button>
 
             <div className="personal-note-section">
               {!isEditingNote ? (
@@ -1038,17 +1088,21 @@ export function ResurfaceClient() {
               ) : null}
             </div>
 
-            <label className="archive-label" htmlFor="archive-category">
-              Archive in library (stop resurfacing)
-            </label>
-            <input
-              id="archive-category"
-              value={archivedTo}
-              onChange={(event) => setArchivedTo(event.target.value)}
-              className="archive-input"
-              placeholder="Shelf or tag: e.g. AI tools / essays / drums"
-              disabled={showingCachedData}
-            />
+            <div className="review-decide">
+            <div className="archive-row">
+              <label className="archive-label" htmlFor="archive-category">
+                Archive to
+              </label>
+              <input
+                id="archive-category"
+                value={archivedTo}
+                onChange={(event) => setArchivedTo(event.target.value)}
+                className="archive-input"
+                placeholder="Shelf or tag: e.g. AI tools / essays / drums"
+                disabled={showingCachedData}
+                title="Where Archive files this item in the library (it stops resurfacing)"
+              />
+            </div>
 
             {forceDecision ? (
               <p className="warning">
@@ -1147,6 +1201,7 @@ export function ResurfaceClient() {
                   <kbd>⌘Z</kbd> undo
                 </span>
               ) : null}
+            </div>
             </div>
           </article>
         ) : null}
