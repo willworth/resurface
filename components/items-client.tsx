@@ -1408,6 +1408,7 @@ export function ItemsClient() {
 
             <input
               className="items-search"
+              aria-label="Search library"
               placeholder="Search library…"
               disabled={noteNavigationBlocked}
               value={searchInput}
